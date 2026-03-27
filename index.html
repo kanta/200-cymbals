@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cymballist Layout Tool / シンバラー配置ツール</title>
+<style>
+  :root{
+    --bg:#f0ede6;--surface:#e8e4db;--surface2:#ddd9cf;
+    --border:rgba(0,0,0,0.12);--border2:rgba(0,0,0,0.2);
+    --text:#1a1816;--text2:#5a5650;--text3:#8a8680;--accent:#2a2420;
+    --warn-bg:#fef3cd;--warn-text:#7a5200;
+    --danger-bg:#fde8e8;--danger-text:#8a1a1a;
+    --radius:8px;
+  }
+  @media(prefers-color-scheme:dark){:root{
+    --bg:#161614;--surface:#222220;--surface2:#2c2c28;
+    --border:rgba(255,255,255,0.08);--border2:rgba(255,255,255,0.15);
+    --text:#e8e4da;--text2:#a0988e;--text3:#6a6460;--accent:#e8e4da;
+    --warn-bg:#2a2000;--warn-text:#e8c060;
+    --danger-bg:#2a0808;--danger-text:#f08080;
+  }}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:'DM Sans','Helvetica Neue',sans-serif;font-size:14px;line-height:1.5;min-height:100vh;}
+  header{border-bottom:0.5px solid var(--border2);padding:14px 20px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;}
+  header h1{font-size:16px;font-weight:600;letter-spacing:-0.02em;}
+  header .sub{font-size:12px;color:var(--text3);}
+  .layout{display:grid;grid-template-columns:296px 1fr;min-height:calc(100vh - 52px);}
+  @media(max-width:780px){.layout{grid-template-columns:1fr;}}
+  .sidebar{border-right:0.5px solid var(--border);padding:12px;overflow-y:auto;}
+  .canvas-area{padding:12px;display:flex;flex-direction:column;gap:10px;overflow-y:auto;}
+  .seg-group{display:flex;}
+  .seg-group button{flex:1;padding:5px 0;font-size:12px;border:0.5px solid var(--border2);background:var(--bg);color:var(--text2);cursor:pointer;font-family:inherit;transition:background .15s,color .15s;}
+  .seg-group button:first-child{border-radius:var(--radius) 0 0 var(--radius);}
+  .seg-group button:last-child{border-radius:0 var(--radius) var(--radius) 0;}
+  .seg-group button:not(:first-child){border-left:none;}
+  .seg-group button.active{background:var(--surface2);color:var(--text);font-weight:500;}
+  .toggle-row{display:flex;gap:8px;margin-bottom:12px;}
+  .toggle-row .seg-group{flex:1;}
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:10px;}
+  .stat{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius);padding:6px 9px;}
+  .stat-label{font-size:10px;color:var(--text3);margin-bottom:1px;text-transform:uppercase;letter-spacing:.04em;}
+  .stat-val{font-size:16px;font-weight:600;color:var(--text);letter-spacing:-0.02em;}
+  .warn{font-size:12px;padding:5px 9px;border-radius:var(--radius);margin-bottom:5px;display:none;border:0.5px solid;}
+  .warn-yellow{background:var(--warn-bg);color:var(--warn-text);border-color:var(--warn-text);}
+  .warn-red{background:var(--danger-bg);color:var(--danger-text);border-color:var(--danger-text);}
+  .row-detail{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;}
+  .row-badge{font-size:11px;color:var(--text2);background:var(--surface);border:0.5px solid var(--border);border-radius:4px;padding:2px 5px;}
+  .row-badge.clear{border-color:#2a9d60;color:#1a7a48;}
+  .row-badge.blocked{border-color:#e05030;color:#b03010;}
+  @media(prefers-color-scheme:dark){
+    .row-badge.clear{color:#50d090;}
+    .row-badge.blocked{color:#f07050;}
+  }
+  .sec{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:7px;padding-bottom:5px;border-bottom:0.5px solid var(--border);}
+  .ctrl-row{display:flex;align-items:center;gap:6px;margin-bottom:8px;}
+  .ctrl-row label{font-size:12px;color:var(--text2);width:108px;flex-shrink:0;line-height:1.3;}
+  .ctrl-row input[type=range]{flex:1;min-width:0;-webkit-appearance:none;height:3px;background:var(--border2);border-radius:2px;outline:none;cursor:pointer;}
+  .ctrl-row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid var(--bg);box-shadow:0 0 0 1px var(--border2);}
+  .ctrl-row input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid var(--bg);}
+  .vout{width:48px;flex-shrink:0;text-align:right;font-size:12px;font-weight:500;color:var(--text);font-variant-numeric:tabular-nums;overflow:hidden;}
+  .fixed-val{width:48px;flex-shrink:0;text-align:right;font-size:12px;color:var(--text3);font-variant-numeric:tabular-nums;overflow:hidden;}
+  canvas{width:100%;border-radius:var(--radius);border:0.5px solid var(--border);display:block;}
+  .clabel{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:4px;}
+  .sl-legend{display:flex;flex-wrap:wrap;gap:10px;font-size:11px;color:var(--text2);margin-top:5px;}
+  .sl-legend span{display:flex;align-items:center;gap:5px;}
+  footer{font-size:10px;color:var(--text3);padding:8px 16px;border-top:0.5px solid var(--border);text-align:center;}
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+<header>
+  <h1 id="h-title">Cymballist Layout Tool</h1>
+  <span class="sub" id="h-sub">~200 performers · outdoor performance</span>
+</header>
+<div class="layout">
+<div class="sidebar">
+  <div class="toggle-row">
+    <div class="seg-group" id="lang-toggle">
+      <button class="active" onclick="setLang('en')">EN</button>
+      <button onclick="setLang('ja')">日本語</button>
+    </div>
+    <div class="seg-group" id="unit-toggle">
+      <button class="active" onclick="setUnit('m')">m</button>
+      <button onclick="setUnit('ft')">ft</button>
+    </div>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="stat-label" data-key="total">Total</div><div class="stat-val" id="s-total">—</div></div>
+    <div class="stat"><div class="stat-label" data-key="outerDiam">Outer diam.</div><div class="stat-val" id="s-diam">—</div></div>
+    <div class="stat"><div class="stat-label" data-key="rows">Rows</div><div class="stat-val" id="s-rows">—</div></div>
+    <div class="stat"><div class="stat-label" data-key="minSp">Min spacing</div><div class="stat-val" id="s-minsp">—</div></div>
+  </div>
+  <div class="warn warn-yellow" id="warn-crowd"></div>
+  <div class="warn warn-red"    id="warn-count"></div>
+  <div class="row-detail" id="row-detail"></div>
+
+  <div class="sec" data-key="secLayout">Layout</div>
+  <div class="ctrl-row"><label data-key="cRows">Rows</label><input type="range" id="c-rows" min="2" max="7" step="1" value="4" oninput="upd()"><span class="vout" id="v-rows">4</span></div>
+  <div class="ctrl-row"><label data-key="cStage">Stage diameter</label><input type="range" id="c-stage" min="2" max="8" step="0.5" value="4" oninput="upd()"><span class="vout" id="v-stage"></span></div>
+  <div class="ctrl-row"><label data-key="cGap1">Stage → row 1</label><input type="range" id="c-gap1" min="0.5" max="6" step="0.25" value="2.5" oninput="upd()"><span class="vout" id="v-gap1"></span></div>
+  <div class="ctrl-row"><label data-key="cRowsp">Row spacing</label><input type="range" id="c-rowsp" min="1" max="4" step="0.25" value="1.5" oninput="upd()"><span class="vout" id="v-rowsp"></span></div>
+  <div class="ctrl-row"><label data-key="cPw">Person width</label><input type="range" id="c-pw" min="0.7" max="2" step="0.05" value="1.2" oninput="upd()"><span class="vout" id="v-pw"></span></div>
+  <div class="ctrl-row"><label data-key="cCym">Cymbal diam.</label><input type="range" id="c-cym" min="0.35" max="0.65" step="0.025" value="0.45" oninput="upd()"><span class="vout" id="v-cym"></span></div>
+  <div class="ctrl-row"><label data-key="cSeated">Seated rows</label><input type="range" id="c-seated" min="0" max="6" step="1" value="2" oninput="upd()"><span class="vout" id="v-seated">2</span></div>
+
+  <div class="sec" data-key="secHeights" style="margin-top:12px">Heights</div>
+  <div class="ctrl-row"><label data-key="cStageH">Stage height</label><input type="range" id="c-stageh" min="0" max="1.2" step="0.05" value="0.6" oninput="upd()"><span class="vout" id="v-stageh"></span></div>
+  <div class="ctrl-row"><label data-key="cStoolH">Stool height</label><input type="range" id="c-stoolh" min="0.3" max="0.6" step="0.01" value="0.45" oninput="upd()"><span class="vout" id="v-stoolh"></span></div>
+</div>
+
+<div class="canvas-area">
+  <div>
+    <div class="clabel" data-key="lblPlan">Plan view</div>
+    <canvas id="cv-plan"></canvas>
+  </div>
+  <div>
+    <div class="clabel" data-key="lblElev">Elevation — section through center (1:1 scale)</div>
+    <canvas id="cv-elev"></canvas>
+    <div class="sl-legend">
+      <span><svg width="28" height="10"><line x1="0" y1="5" x2="28" y2="5" stroke="#2a9d60" stroke-width="2"/></svg><span data-key="legClear">Sightline to T-handle: clear</span></span>
+      <span><svg width="28" height="10"><line x1="0" y1="5" x2="28" y2="5" stroke="#e05030" stroke-width="2" stroke-dasharray="4,3"/></svg><span data-key="legBlocked">Sightline to T-handle: blocked</span></span>
+    </div>
+  </div>
+  <div id="fixed-info" style="font-size:11px;color:var(--text3);border-top:0.5px solid var(--border);padding-top:10px;display:grid;grid-template-columns:repeat(3,1fr);gap:6px 16px;">
+    <div><span style="color:var(--text2)" data-key="cPerfH">Performer height</span>: <span style="color:var(--text)">160 cm</span></div>
+    <div><span style="color:var(--text2)" data-key="cArmL">Arm length</span>: <span style="color:var(--text)">65 cm</span></div>
+    <div><span style="color:var(--text2)" data-key="cArmAng">Arm angle</span>: <span style="color:var(--text)">45° (↓)</span></div>
+    <div><span style="color:var(--text2)" data-key="dConeLbl">Cone height</span>: <span style="color:var(--text)">700 mm</span></div>
+    <div><span style="color:var(--text2)" data-key="dHandleLbl">T-handle</span>: <span style="color:var(--text)">60 mm</span></div>
+    <div><span style="color:var(--text2)" data-key="dTotalLbl">Device total</span>: <span style="color:var(--text)">760 mm</span></div>
+    <div><span style="color:var(--text2)" data-key="cHm">Male avg.</span>: <span style="color:var(--text)">175 cm</span></div>
+    <div><span style="color:var(--text2)" data-key="cHf">Female avg.</span>: <span style="color:var(--text)">162 cm</span></div>
+    <div><span style="color:var(--text2)" data-key="cHavg">Rep. (avg)</span>: <span style="color:var(--text)" id="v-cymbavg">168.5 cm</span></div>
+  </div>
+  <footer id="footer-text">All values are provisional. Parameters subject to change.</footer>
+</div>
+</div>
+
+<script>
+// ── anthropometry ─────────────────────────────────────────────────────────────
+const CYMB_H_MALE   = 1.75;
+const CYMB_H_FEMALE = 1.62;
+const CYMB_H_REP    = (CYMB_H_MALE + CYMB_H_FEMALE) / 2; // 1.685
+
+const CONE_H   = 0.70; // m
+const HANDLE_H = 0.06; // m
+const DEVICE_L = CONE_H + HANDLE_H; // 0.76m  (T-handle at top, base at bottom)
+
+function seededRand(seed){
+  let s=seed;
+  return ()=>{ s=(s*1664525+1013904223)&0xffffffff; return (s>>>0)/0xffffffff; };
+}
+function sampleHeight(rng){
+  const male=rng()>0.5;
+  const mean=male?CYMB_H_MALE:CYMB_H_FEMALE;
+  const u1=Math.max(1e-9,rng()),u2=rng();
+  return mean+Math.sqrt(-2*Math.log(u1))*Math.cos(2*Math.PI*u2)*0.07;
+}
+
+function eyeStanding(h)       { return h*0.936; }
+function eyeSeated(h,stool)   { return stool+h*0.36; }
+function headTopStanding(h)   { return h; }
+function headTopSeated(h,stool){ return stool+h*0.53; }
+function shoulderH(h)          { return h*0.818; }
+
+// Arm angle: positive = below horizontal (degrees below horiz)
+// Wrist position relative to shoulder:
+//   wristX (outward) = armL * cos(angDeg)
+//   wristDY (down)   = armL * sin(angDeg)   [positive = downward]
+// Sacone is held at T-handle (top), pointing outward+down along arm axis.
+// Device axis = same direction as arm.
+// T-handle is at wrist. Cone extends further outward+down. Base is outermost/lowest.
+//   handleAbs  = shoulderAbs - armL*sin(angDeg)               [height of T-handle = wrist]
+//   baseAbs    = handleAbs   - DEVICE_L*sin(angDeg)           [height of cone base]
+//   baseX      = wristX      + DEVICE_L*cos(angDeg)           [horizontal reach of base]
+
+function saconePositions(stageH, perfH, armL, angDeg){
+  const shoulderAbs = stageH + shoulderH(perfH);
+  const sinA = Math.sin(angDeg*Math.PI/180);
+  const cosA = Math.cos(angDeg*Math.PI/180);
+  // wrist (= T-handle location)
+  const handleAbs = shoulderAbs - armL*sinA;
+  const handleX   = armL*cosA;              // horizontal outward from performer center
+  // cone base (= open end, the light-emitting face)
+  const baseAbs   = handleAbs - DEVICE_L*sinA;
+  const baseX     = handleX   + DEVICE_L*cosA;
+  return { shoulderAbs, handleAbs, handleX, baseAbs, baseX };
+}
+
+// ── i18n ─────────────────────────────────────────────────────────────────────
+const T={
+  en:{
+    title:'Cymballist Layout Tool', sub:'~200 performers · outdoor performance',
+    total:'Total', outerDiam:'Outer diam.', rows:'Rows', minSp:'Min spacing',
+    secLayout:'Layout', secHeights:'Heights', secDevice:'Sacone (fixed)',
+    secCymbH:'Cymbalist heights (fixed)',
+    cRows:'Rows', cStage:'Stage diameter', cGap1:'Stage → row 1',
+    cRowsp:'Row spacing', cPw:'Person width', cCym:'Cymbal diam.',
+    cSeated:'Seated rows', cStageH:'Stage height', cStoolH:'Stool height',
+    cPerfH:'Performer height', cArmL:'Arm length', cArmAng:'Arm angle',
+    dConeLbl:'Cone height', dHandleLbl:'T-handle', dTotalLbl:'Total',
+    cHm:'Male avg.', cHf:'Female avg.', cHavg:'Rep. (avg)',
+    seated:'seated', standing:'standing', cymbal:'cymbal',
+    stageLabel:'stage', perfLabel:'Performer', floorLabel:'floor',
+    handleLabel:'T-handle (target)',
+    warnCrowd:'Warning: some rows may be too crowded (spacing < 0.8 m).',
+    warnCount:'Total is significantly away from 200.',
+    rowInfo:(i,n,r,sp,isSeat,clear)=>
+      `R${i+1}: ${n} · r=${r} · ${isSeat?'⊙ seated':'↑ standing'} · sp=${sp} · ${clear?'✓ clear':'✗ blocked'}`,
+    lblPlan:'Plan view',
+    lblElev:'Elevation — section through center (1:1 scale)',
+    legClear:'Sightline to T-handle: clear',
+    legBlocked:'Sightline to T-handle: blocked',
+    footer:'All values are provisional. Parameters subject to change.',
+    row:'R', degUnit:'°',
+  },
+  ja:{
+    title:'シンバラー配置ツール', sub:'約200名 · 屋外パフォーマンス',
+    total:'合計人数', outerDiam:'外周直径', rows:'列数', minSp:'最小間隔',
+    secLayout:'配置パラメータ', secHeights:'高さ・体格', secDevice:'サコーン（固定値）',
+    secCymbH:'シンバラー身長（固定）',
+    cRows:'列数', cStage:'ステージ直径', cGap1:'ステージ→1列目',
+    cRowsp:'列間距離', cPw:'1人あたり幅', cCym:'シンバル直径',
+    cSeated:'着席列数', cStageH:'ステージ高さ', cStoolH:'スツール高さ',
+    cPerfH:'パフォーマー身長', cArmL:'腕の長さ', cArmAng:'腕の角度',
+    dConeLbl:'三角錐部分', dHandleLbl:'Tハンドル', dTotalLbl:'合計',
+    cHm:'男性平均', cHf:'女性平均', cHavg:'代表値（平均）',
+    seated:'着席', standing:'立位', cymbal:'シンバル',
+    stageLabel:'ステージ', perfLabel:'パフォーマー', floorLabel:'フロア',
+    handleLabel:'Tハンドル（視線目標）',
+    warnCrowd:'注意: 一部の列が密すぎます（間隔 < 0.8 m）。',
+    warnCount:'合計人数が200人から大きく外れています。',
+    rowInfo:(i,n,r,sp,isSeat,clear)=>
+      `${i+1}列: ${n}人 · r=${r} · ${isSeat?'⊙ 着席':'↑ 立位'} · 間隔=${sp} · ${clear?'✓ 見える':'✗ 遮られる'}`,
+    lblPlan:'平面図',
+    lblElev:'立面図 — 中心断面（1:1 スケール）',
+    legClear:'Tハンドルへの視線: 通る',
+    legBlocked:'Tハンドルへの視線: 遮られる',
+    footer:'数値はすべて暫定値です。検討により更新されることを前提とします。',
+    row:'列', degUnit:'°',
+  }
+};
+function t(k){ return T[lang][k]||k; }
+
+let unit='m', lang='en';
+const cvPlan=document.getElementById('cv-plan');
+const cvElev=document.getElementById('cv-elev');
+const ctxP=cvPlan.getContext('2d');
+const ctxE=cvElev.getContext('2d');
+
+function setLang(l){
+  lang=l;
+  document.querySelectorAll('#lang-toggle button').forEach((b,i)=>
+    b.classList.toggle('active',(i===0&&l==='en')||(i===1&&l==='ja')));
+  upd();
+}
+function setUnit(u){
+  unit=u;
+  document.querySelectorAll('#unit-toggle button').forEach((b,i)=>
+    b.classList.toggle('active',(i===0&&u==='m')||(i===1&&u==='ft')));
+  upd();
+}
+function fmt(m){
+  if(unit==='m') return m.toFixed(2)+' m';
+  const ft=m/0.3048,w=Math.floor(ft),inch=Math.round((ft-w)*12);
+  return inch===12?`${w+1}′ 0″`:`${w}′ ${inch}″`;
+}
+function fmtS(m){
+  if(unit==='m') return m.toFixed(1)+'m';
+  const ft=m/0.3048,w=Math.floor(ft),inch=Math.round((ft-w)*12);
+  return inch===12?`${w+1}′`:`${w}′${inch}″`;
+}
+function fmtCm(m){
+  if(unit==='m') return Math.round(m*100)+'cm';
+  return Math.round(m/0.0254)+'"';
+}
+function val(id){ return parseFloat(document.getElementById(id).value); }
+
+// ── sightline check ───────────────────────────────────────────────────────────
+// Can row ri see target at (targetX=0, targetH) ?
+// Line from (rowR, eyeH) → (0, targetH), must clear all closer rows' head tops.
+function checkSightline(radii, ri, eyeH, targetH, rowHeadFn){
+  const r=radii[ri];
+  if(r<=0) return true;
+  for(let j=0;j<ri;j++){
+    const rx=radii[j];
+    const tParam=(r-rx)/r;
+    const lineH=eyeH+tParam*(targetH-eyeH);
+    if(lineH<rowHeadFn(j)) return false;
+  }
+  return true;
+}
+
+// ── update ────────────────────────────────────────────────────────────────────
+function upd(){
+  document.querySelectorAll('[data-key]').forEach(el=>{
+    const k=el.getAttribute('data-key');
+    if(T[lang][k]) el.textContent=T[lang][k];
+  });
+  document.getElementById('h-title').textContent=t('title');
+  document.getElementById('h-sub').textContent=t('sub');
+  document.getElementById('footer-text').textContent=t('footer');
+  document.getElementById('v-cymbavg').textContent=unit==='m'?'168.5 cm':'5′ 6″';
+
+  const rows   = Math.round(val('c-rows'));
+  const stageR = val('c-stage')/2;
+  const gap1   = val('c-gap1');
+  const rowSp  = val('c-rowsp');
+  const pw     = val('c-pw');
+  const cymD   = val('c-cym');
+  const seated = Math.min(Math.round(val('c-seated')),rows);
+  const stageH = val('c-stageh');
+  const stoolH = val('c-stoolh');
+  // Fixed constants
+  const perfH  = 1.60;
+  const armL   = 0.65;
+  const armAng = 45;
+
+  document.getElementById('v-rows').textContent   = rows;
+  document.getElementById('v-stage').textContent  = fmt(stageR*2);
+  document.getElementById('v-gap1').textContent   = fmt(gap1);
+  document.getElementById('v-rowsp').textContent  = fmt(rowSp);
+  document.getElementById('v-pw').textContent     = fmt(pw);
+  document.getElementById('v-cym').textContent    = fmtCm(cymD);
+  document.getElementById('v-seated').textContent = seated;
+  document.getElementById('v-stageh').textContent = fmtCm(stageH);
+  document.getElementById('v-stoolh').textContent = fmtCm(stoolH);
+
+  const radii    = Array.from({length:rows},(_,r)=>stageR+gap1+r*rowSp);
+  const counts   = radii.map(r=>Math.max(3,Math.floor((2*Math.PI*r)/pw)));
+  const total    = counts.reduce((a,b)=>a+b,0);
+  const outerD   = radii[rows-1]*2;
+  const spacings = radii.map((r,i)=>(2*Math.PI*r)/counts[i]);
+  const minSp    = Math.min(...spacings);
+
+  // Sacone positions
+  const pos = saconePositions(stageH, perfH, armL, armAng);
+  // handleAbs = T-handle height (= wrist, lower end visible to audience)
+  // baseAbs   = cone base height (= open illuminated face, slightly lower than handle)
+  // Note: both are below shoulder level because arm is angled down
+  const handleAbs = pos.handleAbs;
+  const baseAbs   = pos.baseAbs;
+
+  // Representative cymbalist heights for sightline logic
+  function rowEyeH(ri){
+    return ri<seated ? eyeSeated(CYMB_H_REP,stoolH) : eyeStanding(CYMB_H_REP);
+  }
+  function rowHeadH(ri){
+    return ri<seated ? headTopSeated(CYMB_H_REP,stoolH) : headTopStanding(CYMB_H_REP);
+  }
+
+  const sightClear = radii.map((_,ri)=>checkSightline(radii,ri,rowEyeH(ri),handleAbs,rowHeadH));
+
+  document.getElementById('s-total').textContent = total;
+  document.getElementById('s-diam').textContent  = fmt(outerD);
+  document.getElementById('s-rows').textContent  = rows;
+  document.getElementById('s-minsp').textContent = fmtS(minSp);
+
+  document.getElementById('row-detail').innerHTML = counts.map((n,i)=>{
+    const cls = sightClear[i] ? 'clear' : 'blocked';
+    return `<span class="row-badge ${cls}">${t('rowInfo')(i,n,fmtS(radii[i]),fmtS(spacings[i]),i<seated,sightClear[i])}</span>`;
+  }).join('');
+
+  const wc=document.getElementById('warn-crowd');
+  wc.textContent=t('warnCrowd'); wc.style.display=minSp<0.8?'block':'none';
+  const wd=document.getElementById('warn-count');
+  wd.textContent=t('warnCount'); wd.style.display=(total<160||total>240)?'block':'none';
+
+  drawPlan(radii,counts,stageR,cymD,pw,seated,sightClear);
+  drawElev(radii,stageR,stageH,perfH,armL,armAng,stoolH,seated,sightClear,cymD,pos);
+}
+
+// ── plan view ─────────────────────────────────────────────────────────────────
+function drawPlan(radii,counts,stageR,cymD,pw,seated,sightClear){
+  const isDark=window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const container=cvPlan.parentElement;
+  const W=container.clientWidth-2;
+  const H=Math.min(W,Math.round(window.innerHeight*0.44));
+  cvPlan.width=W*devicePixelRatio; cvPlan.height=H*devicePixelRatio;
+  cvPlan.style.width=W+'px'; cvPlan.style.height=H+'px';
+  const c=ctxP; c.scale(devicePixelRatio,devicePixelRatio);
+
+  const outerR=radii[radii.length-1];
+  const pad=Math.max(cymD,pw*0.6)+0.6;
+  const scale=(Math.min(W,H)/2-20)/(outerR+pad);
+  const cx=W/2, cy=H/2;
+
+  const bg       =isDark?'#161614':'#e8e4db';
+  const stageCol =isDark?'#3a3830':'#ccc8be';
+  const stageEdge=isDark?'#6a6860':'#888780';
+  const colSeat  =isDark?'#6060c8':'#4a44a8';
+  const colStand =isDark?'#1d9e75':'#0f6e56';
+  const cymCol   =isDark?'#c8a030':'#8a5e0a';
+  const cymStr   =isDark?'#e8c040':'#5a3e06';
+  const gridCol  =isDark?'rgba(255,255,255,0.04)':'rgba(0,0,0,0.05)';
+  const textCol  =isDark?'#c2c0b6':'#3a3630';
+
+  c.clearRect(0,0,W,H); c.fillStyle=bg; c.fillRect(0,0,W,H);
+  for(const r of radii){
+    c.beginPath(); c.arc(cx,cy,r*scale,0,Math.PI*2);
+    c.strokeStyle=gridCol; c.lineWidth=1; c.stroke();
+  }
+  c.beginPath(); c.arc(cx,cy,stageR*scale,0,Math.PI*2);
+  c.fillStyle=stageCol; c.fill(); c.strokeStyle=stageEdge; c.lineWidth=1.5; c.stroke();
+  if(stageR*scale>22){
+    c.fillStyle=isDark?'#f0ede4':'#1a1816';
+    c.font=`500 ${Math.min(13,stageR*scale*0.45)}px 'DM Sans',sans-serif`;
+    c.textAlign='center'; c.textBaseline='middle';
+    c.fillText(t('stageLabel'),cx,cy);
+  }
+  c.beginPath(); c.arc(cx,cy,Math.max(3,stageR*scale*0.1),0,Math.PI*2);
+  c.fillStyle=cymCol; c.fill();
+
+  const cymR=(cymD/2)*scale;
+  const bodyW=pw*0.28*scale, bodyH=pw*0.32*scale;
+  const rng=seededRand(42);
+
+  radii.forEach((r,ri)=>{
+    const n=counts[ri]; const isSeat=ri<seated; const col=isSeat?colSeat:colStand;
+    for(let i=0;i<n;i++){
+      const angle=(2*Math.PI*i)/n-Math.PI/2;
+      const px=cx+r*scale*Math.cos(angle), py=cy+r*scale*Math.sin(angle);
+      const dirX=Math.cos(angle+Math.PI), dirY=Math.sin(angle+Math.PI);
+      const standD=bodyH*0.7+cymR*0.6;
+      const cymX=px+dirX*standD, cymY=py+dirY*standD;
+      c.save(); c.translate(cymX,cymY); c.rotate(angle+Math.PI/2);
+      c.beginPath(); c.ellipse(0,0,cymR,cymR*0.28,0,0,Math.PI*2);
+      c.fillStyle=cymCol; c.fill(); c.strokeStyle=cymStr; c.lineWidth=0.8; c.stroke();
+      c.beginPath(); c.arc(0,0,cymR*0.18,0,Math.PI*2); c.fillStyle=cymStr; c.fill();
+      c.restore();
+      const h=sampleHeight(rng); const sH=h/CYMB_H_REP;
+      const bW=bodyW*Math.sqrt(sH), bH=bodyH*sH;
+      c.save(); c.translate(px,py); c.rotate(angle+Math.PI/2);
+      if(isSeat){
+        c.beginPath(); c.arc(0,bH*0.5,bW,0,Math.PI*2);
+        c.fillStyle=isDark?'rgba(96,96,200,0.2)':'rgba(74,68,168,0.12)'; c.fill();
+      }
+      c.fillStyle=col;
+      c.beginPath(); c.roundRect(-bW/2,-bH/2,bW,bH,bW*0.3); c.fill();
+      const hR=bW*0.45;
+      c.beginPath(); c.arc(0,-bH/2-hR*0.8,hR,0,Math.PI*2); c.fill();
+      c.restore();
+    }
+  });
+
+  // Legend
+  const legX=12, legY=H-58;
+  [[cymCol,cymStr,'cymbal'],[colSeat,null,'seated'],[colStand,null,'standing']].forEach(([col,str,key],i)=>{
+    const y=legY+i*18;
+    if(str){
+      c.fillStyle=col; c.beginPath(); c.ellipse(legX+5,y+5,5,1.8,0,0,Math.PI*2); c.fill();
+      c.strokeStyle=str; c.lineWidth=0.5; c.stroke();
+    }else{
+      c.fillStyle=col; c.beginPath(); c.roundRect(legX,y,10,10,2); c.fill();
+    }
+    c.fillStyle=textCol; c.font='11px "DM Sans",sans-serif';
+    c.textAlign='left'; c.textBaseline='top'; c.fillText(t(key),legX+16,y);
+  });
+  // Scale bar
+  const bM=5,bPx=bM*scale,bX=W-20-bPx,bY=H-18;
+  c.strokeStyle=textCol; c.lineWidth=1.5;
+  c.beginPath(); c.moveTo(bX,bY); c.lineTo(bX+bPx,bY); c.stroke();
+  c.beginPath(); c.moveTo(bX,bY-4); c.lineTo(bX,bY+4); c.stroke();
+  c.beginPath(); c.moveTo(bX+bPx,bY-4); c.lineTo(bX+bPx,bY+4); c.stroke();
+  c.fillStyle=textCol; c.font='11px "DM Sans",sans-serif';
+  c.textAlign='center'; c.textBaseline='bottom'; c.fillText(fmt(bM),bX+bPx/2,bY-6);
+}
+
+// ── elevation view ────────────────────────────────────────────────────────────
+function drawElev(radii,stageR,stageH,perfH,armL,armAng,stoolH,seated,sightClear,cymD,pos){
+  const isDark=window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const rows=radii.length;
+  const outerR=radii[rows-1];
+  const { shoulderAbs, handleAbs, handleX, baseAbs, baseX } = pos;
+
+  // World height: from 0 to well above shoulder
+  const maxWorldH = Math.max(shoulderAbs, stageH+perfH, CYMB_H_MALE) * 1.18 + 0.3;
+
+  const container=cvElev.parentElement;
+  const W=container.clientWidth-2;
+  const marginL=52,marginR=16,marginT=20,marginB=34;
+  const availW=W-marginL-marginR;
+  const scale=availW/(outerR*2); // strict 1:1
+  const drawH=maxWorldH*scale;
+  const H=Math.ceil(drawH+marginT+marginB);
+
+  cvElev.width=W*devicePixelRatio; cvElev.height=H*devicePixelRatio;
+  cvElev.style.width=W+'px'; cvElev.style.height=H+'px';
+  const c=ctxE; c.scale(devicePixelRatio,devicePixelRatio);
+
+  const ox=marginL+availW/2;
+  const oy=marginT+drawH;
+  function wx(x){ return ox+x*scale; }
+  function wy(y){ return oy-y*scale; }
+
+  const bg        =isDark?'#161614':'#e8e4db';
+  const gridCol   =isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.07)';
+  const textCol   =isDark?'#c2c0b6':'#3a3630';
+  const floorCol  =isDark?'#4a4840':'#aaa89e';
+  const stageCol  =isDark?'#4a4640':'#c0bcb0';
+  const stageEdge =isDark?'#888680':'#888070';
+  const colSeat   =isDark?'#6060c8':'#4a44a8';
+  const colStand  =isDark?'#1d9e75':'#0f6e56';
+  const perfCol   =isDark?'#c8a030':'#8a5e0a';
+  const coneStroke=isDark?'#c8a030':'#8a5e0a';
+  const coneFill  =isDark?'rgba(200,160,48,0.4)':'rgba(138,94,10,0.3)';
+  const clrCol   ='#2a9d60';
+  const blkCol   ='#e05030';
+
+  c.clearRect(0,0,W,H); c.fillStyle=bg; c.fillRect(0,0,W,H);
+
+  // Grid
+  c.setLineDash([3,4]); c.lineWidth=0.5;
+  for(let h=0;h<=maxWorldH;h+=0.5){
+    c.strokeStyle=gridCol;
+    c.beginPath(); c.moveTo(marginL,wy(h)); c.lineTo(W-marginR,wy(h)); c.stroke();
+    c.fillStyle=textCol; c.font='10px "DM Sans",sans-serif';
+    c.textAlign='right'; c.textBaseline='middle';
+    c.fillText(fmtCm(h),marginL-4,wy(h));
+  }
+  c.setLineDash([]);
+
+  // Floor
+  c.fillStyle=floorCol; c.fillRect(marginL,wy(0),availW,3);
+
+  // Stage
+  if(stageH>0.01){
+    c.fillStyle=stageCol;
+    c.fillRect(wx(-stageR),wy(stageH),stageR*2*scale,stageH*scale);
+    c.strokeStyle=stageEdge; c.lineWidth=0.8;
+    c.strokeRect(wx(-stageR),wy(stageH),stageR*2*scale,stageH*scale);
+    if(stageH*scale>12){
+      c.fillStyle=textCol; c.font='11px "DM Sans",sans-serif';
+      c.textAlign='center'; c.textBaseline='middle';
+      c.fillText(t('stageLabel'),wx(0),wy(stageH/2));
+    }
+  }
+
+  // ── Performer ──────────────────────────────────────────────────────────────
+  {
+    const bW=Math.max(5,Math.min(14,scale*0.28));
+    const base=stageH;
+
+    // Legs
+    c.fillStyle=perfCol;
+    const legBot=wy(base), legTop=wy(base+perfH*0.48);
+    c.beginPath(); c.roundRect(wx(0)-bW/2,legTop,bW*0.42,legBot-legTop,1); c.fill();
+    c.beginPath(); c.roundRect(wx(0)+bW*0.08,legTop,bW*0.42,legBot-legTop,1); c.fill();
+    // Body (torso)
+    const bodyTop=wy(base+perfH*0.85), bodyBot=wy(base+perfH*0.48);
+    c.beginPath(); c.roundRect(wx(0)-bW/2,bodyTop,bW,bodyBot-bodyTop,bW*0.3); c.fill();
+    // Head
+    const headR=bW*0.6, headCY=wy(base+perfH*0.935);
+    c.beginPath(); c.arc(wx(0),headCY,headR,0,Math.PI*2); c.fill();
+
+    // ── Arm (right side = toward audience) ────────────────────────────────
+    // Arm goes from shoulder outward+downward
+    const sinA=Math.sin(armAng*Math.PI/180), cosA=Math.cos(armAng*Math.PI/180);
+    // shoulder canvas coords (center of body, approx)
+    const sX=wx(0), sY=wy(shoulderAbs);
+    const wX=wx(handleX), wY=wy(handleAbs); // wrist = T-handle
+
+    // Arm line
+    c.strokeStyle=perfCol; c.lineWidth=2;
+    c.beginPath(); c.moveTo(sX,sY); c.lineTo(wX,wY); c.stroke();
+
+    // ── Sacone ────────────────────────────────────────────────────────────
+    // Device axis direction: same as arm = (cosA, -sinA) in world (outward, downward)
+    // T-handle at wrist (handleX, handleAbs).
+    // Cone extends further outward+down to (baseX, baseAbs).
+    // Draw cone body as trapezoid (it has a base width)
+    const coneLen=CONE_H*scale;
+    const coneTopR=Math.max(2, CONE_H*scale*0.06); // narrow at top (near T-handle)
+    const coneBotR=Math.max(6, CONE_H*scale*0.22); // wide at bottom (base)
+    // Axis unit vector in canvas space: right & down
+    const axX= cosA, axY= sinA; // world unit vector (outward, downward in world = outward, upward in canvas Y)
+    // In canvas: +x = right, +y = down. World y up = canvas y down.
+    // axis in canvas: (cosA, +sinA) [down because cone points lower in canvas]
+    const perpX=-sinA, perpY=cosA; // perpendicular to axis in canvas space (rotated 90° CCW)
+
+    // T-handle canvas position
+    const tX=wx(handleX), tY=wy(handleAbs);
+    // Base canvas position
+    const bXc=wx(baseX), bYc=wy(baseAbs);
+
+    // Cone body (quadrilateral): top narrow, bottom wide
+    c.fillStyle=coneFill; c.strokeStyle=coneStroke; c.lineWidth=1;
+    c.beginPath();
+    c.moveTo(tX + perpX*coneTopR*scale/scale, tY + perpY*coneTopR*scale/scale);
+    c.lineTo(tX - perpX*coneTopR*scale/scale, tY - perpY*coneTopR*scale/scale);
+    c.lineTo(bXc - perpX*coneBotR, bYc - perpY*coneBotR);
+    c.lineTo(bXc + perpX*coneBotR, bYc + perpY*coneBotR);
+    c.closePath(); c.fill(); c.stroke();
+
+    // Cone base ellipse (the illuminated open face)
+    const ell_a = coneBotR;      // semi-major (width)
+    const ell_b = coneBotR*0.25; // semi-minor (foreshortening of circle when tilted)
+    c.save();
+    c.translate(bXc, bYc);
+    c.rotate(Math.atan2(perpY,perpX)); // rotate so major axis is perpendicular to cone
+    c.beginPath(); c.ellipse(0,0,ell_a,ell_b,0,0,Math.PI*2);
+    c.fillStyle=isDark?'rgba(220,180,60,0.6)':'rgba(160,110,20,0.5)';
+    c.fill(); c.strokeStyle=coneStroke; c.lineWidth=1; c.stroke();
+    c.restore();
+
+    // T-handle bar
+    const tBarLen=coneTopR*3;
+    c.strokeStyle=isDark?'#e0e0e0':'#333'; c.lineWidth=2.5;
+    c.beginPath();
+    c.moveTo(tX+perpX*tBarLen, tY+perpY*tBarLen);
+    c.lineTo(tX-perpX*tBarLen, tY-perpY*tBarLen);
+    c.stroke();
+    // Handle stem (short segment from cone tip upward along axis, but small)
+    c.lineWidth=2;
+    const hStemLen=HANDLE_H*scale;
+    c.beginPath();
+    c.moveTo(tX, tY);
+    // stem goes opposite direction from cone (back toward shoulder)
+    c.lineTo(tX-cosA*hStemLen, tY+sinA*hStemLen);
+    c.stroke();
+
+    // Target dot at T-handle height (center, not at handleX which is offset)
+    c.beginPath(); c.arc(wx(0),wy(handleAbs),3.5,0,Math.PI*2);
+    c.fillStyle=clrCol; c.fill();
+
+    // Label
+    c.font='10px "DM Sans",sans-serif'; c.textAlign='left'; c.textBaseline='middle';
+    c.fillStyle=clrCol;
+    c.fillText(t('handleLabel'), wx(outerR)+4, wy(handleAbs));
+
+    // Performer label
+    c.fillStyle=textCol; c.textAlign='center'; c.textBaseline='bottom';
+    c.fillText(t('perfLabel'), wx(0), wy(base+perfH)-2);
+  }
+
+  // Dashed horizontal line for T-handle target height
+  c.setLineDash([3,4]); c.lineWidth=0.8;
+  c.strokeStyle=isDark?'rgba(42,157,96,0.3)':'rgba(20,120,60,0.25)';
+  c.beginPath(); c.moveTo(marginL,wy(handleAbs)); c.lineTo(W-marginR-80,wy(handleAbs)); c.stroke();
+  c.setLineDash([]);
+
+  // ── Cymbalists ─────────────────────────────────────────────────────────────
+  const bW_px=Math.max(4,Math.min(14,scale*0.22));
+  const rng=seededRand(7);
+
+  function drawCymbalist(worldX,ri,h){
+    const isSeat=ri<seated;
+    const col=isSeat?colSeat:colStand;
+    // base Y: floor (0) for standing, stool top for seated
+    const baseY=isSeat?stoolH:0;
+
+    // Stool
+    if(isSeat){
+      c.fillStyle=isDark?'#555':'#999';
+      const sw=bW_px*1.3;
+      // Seat top surface
+      c.fillRect(wx(worldX)-sw/2, wy(stoolH), sw, Math.max(2,stoolH*scale*0.08));
+      // Stool legs
+      c.strokeStyle=isDark?'#444':'#bbb'; c.lineWidth=0.8;
+      const lx=sw*0.38;
+      c.beginPath(); c.moveTo(wx(worldX)-lx,wy(stoolH)); c.lineTo(wx(worldX)-lx,wy(0)); c.stroke();
+      c.beginPath(); c.moveTo(wx(worldX)+lx,wy(stoolH)); c.lineTo(wx(worldX)+lx,wy(0)); c.stroke();
+      // Cross brace
+      c.beginPath(); c.moveTo(wx(worldX)-lx,wy(stoolH*0.45)); c.lineTo(wx(worldX)+lx,wy(stoolH*0.45)); c.stroke();
+    }
+
+    const sH=h/CYMB_H_REP;
+    const bW=bW_px*Math.sqrt(sH);
+    const col2=col;
+
+    // For seated: all heights measured from stool top (baseY=stoolH)
+    // Body proportions relative to the person's own height h:
+    //   feet/seat base: baseY
+    //   crotch:  baseY + h*0.47
+    //   shoulder:baseY + h*0.82
+    //   head top:baseY + h*0.53  (seated torso+head above seat)  OR h (standing)
+
+    if(!isSeat){
+      // Standing legs
+      const legBot=wy(0), legTop=wy(h*0.47);
+      c.fillStyle=col2;
+      c.beginPath(); c.roundRect(wx(worldX)-bW/2,legTop,bW*0.42,legBot-legTop,1); c.fill();
+      c.beginPath(); c.roundRect(wx(worldX)+bW*0.08,legTop,bW*0.42,legBot-legTop,1); c.fill();
+    }
+
+    // Torso
+    // Standing: from h*0.47 (crotch) up to h*0.82 (shoulder)
+    // Seated:   from stoolH (seat surface) up to stoolH + sitting torso height
+    //           Sitting torso ≈ 0.36*h (shoulder above seat ≈ 36% of standing height)
+    c.fillStyle=col2;
+    const torsoBot = isSeat ? wy(stoolH)              : wy(h*0.47);
+    const torsoTop = isSeat ? wy(stoolH + h*0.36)     : wy(h*0.82);
+    c.beginPath(); c.roundRect(wx(worldX)-bW/2,torsoTop,bW,torsoBot-torsoTop,bW*0.25); c.fill();
+
+    // Head: sits on top of torso (shoulder level)
+    const headR2=bW*0.52;
+    const shoulderH_abs = isSeat ? stoolH + h*0.36 : h*0.82;
+    const headCenterH   = shoulderH_abs + headR2*1.3/scale;
+    c.beginPath(); c.arc(wx(worldX), wy(headCenterH), headR2, 0, Math.PI*2); c.fill();
+
+    // Cymbal (at shoulder level, slightly inward)
+    const cymAbsH = shoulderH_abs;
+    const cymWX=worldX+(worldX>0?-1:1)*cymD*0.25;
+    c.fillStyle=isDark?'rgba(200,160,48,0.45)':'rgba(138,94,10,0.38)';
+    c.strokeStyle=isDark?'#c8a030':'#8a5e0a'; c.lineWidth=0.6;
+    c.beginPath(); c.ellipse(wx(cymWX),wy(cymAbsH),cymD*scale*0.48,cymD*scale*0.065,0,0,Math.PI*2);
+    c.fill(); c.stroke();
+  }
+
+  radii.forEach((r,ri)=>{
+    const hR=sampleHeight(rng), hL=sampleHeight(rng);
+    drawCymbalist( r,ri,hR);
+    drawCymbalist(-r,ri,hL);
+  });
+
+  // ── Sightlines (right side only) ──────────────────────────────────────────
+  radii.forEach((r,ri)=>{
+    const eyeH=ri<seated ? eyeSeated(CYMB_H_REP,stoolH) : eyeStanding(CYMB_H_REP);
+    const clear=sightClear[ri];
+    const col=clear?clrCol:blkCol;
+
+    c.beginPath(); c.moveTo(wx(r),wy(eyeH)); c.lineTo(wx(0),wy(handleAbs));
+    c.strokeStyle=col; c.lineWidth=1.5;
+    c.setLineDash(clear?[]:[4,3]); c.stroke(); c.setLineDash([]);
+
+    // Eye dot
+    c.beginPath(); c.arc(wx(r),wy(eyeH),2.5,0,Math.PI*2);
+    c.fillStyle=col; c.fill();
+
+    // Row label
+    c.fillStyle=col; c.font=`600 10px "DM Sans",sans-serif`;
+    c.textAlign='left'; c.textBaseline='bottom';
+    const lbl=lang==='ja'?`${ri+1}${t('row')}`:`R${ri+1}`;
+    c.fillText(lbl,wx(r)+4,wy(eyeH)-2);
+  });
+
+  // Floor label + scale bar
+  c.fillStyle=textCol; c.font='10px "DM Sans",sans-serif';
+  c.textAlign='left'; c.textBaseline='top';
+  c.fillText(t('floorLabel'),marginL+3,wy(0)+4);
+
+  const bM=2,bPx=bM*scale,bX=W-marginR-bPx,bY2=H-10;
+  c.strokeStyle=textCol; c.lineWidth=1.5;
+  c.beginPath(); c.moveTo(bX,bY2); c.lineTo(bX+bPx,bY2); c.stroke();
+  c.beginPath(); c.moveTo(bX,bY2-3); c.lineTo(bX,bY2+3); c.stroke();
+  c.beginPath(); c.moveTo(bX+bPx,bY2-3); c.lineTo(bX+bPx,bY2+3); c.stroke();
+  c.fillStyle=textCol; c.font='10px "DM Sans",sans-serif';
+  c.textAlign='center'; c.textBaseline='bottom';
+  c.fillText(fmt(bM),bX+bPx/2,bY2-4);
+}
+
+upd();
+window.addEventListener('resize', upd);
+</script>
+</body>
+</html>
