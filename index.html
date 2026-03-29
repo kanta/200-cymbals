@@ -279,14 +279,16 @@ function fmtCm(m){
 function val(id){ return parseFloat(document.getElementById(id).value); }
 
 // ── sightline check ───────────────────────────────────────────────────────────
-// Can row ri see target at (targetX=0, targetH) ?
-// Line from (rowR, eyeH) → (0, targetH), must clear all closer rows' head tops.
-function checkSightline(radii, ri, eyeH, targetH, rowHeadFn){
+// Can row ri (at x=rowR) see target at (targetX, targetH) ?
+// Line from (rowR, eyeH) → (targetX, targetH), must clear all closer rows' head tops.
+function checkSightline(radii, ri, eyeH, targetX, targetH, rowHeadFn){
   const r=radii[ri];
-  if(r<=0) return true;
+  if(r<=targetX) return true; // already at or inside target
   for(let j=0;j<ri;j++){
     const rx=radii[j];
-    const tParam=(r-rx)/r;
+    if(rx<=targetX) continue; // intermediate row is behind target, no obstruction
+    // fraction along the line from (r,eyeH) to (targetX,targetH) at x=rx
+    const tParam=(r-rx)/(r-targetX);
     const lineH=eyeH+tParam*(targetH-eyeH);
     if(lineH<rowHeadFn(j)) return false;
   }
@@ -341,6 +343,7 @@ function upd(){
   // baseAbs   = cone base height (= open illuminated face, slightly lower than handle)
   // Note: both are below shoulder level because arm is angled down
   const handleAbs = pos.handleAbs;
+  const handleX   = pos.handleX;
   const baseAbs   = pos.baseAbs;
 
   // Representative cymbalist heights for sightline logic
@@ -351,7 +354,7 @@ function upd(){
     return ri<seated ? headTopSeated(CYMB_H_REP,stoolH) : headTopStanding(CYMB_H_REP);
   }
 
-  const sightClear = radii.map((_,ri)=>checkSightline(radii,ri,rowEyeH(ri),handleAbs,rowHeadH));
+  const sightClear = radii.map((_,ri)=>checkSightline(radii,ri,rowEyeH(ri),handleX,handleAbs,rowHeadH));
 
   document.getElementById('s-total').textContent = total;
   document.getElementById('s-diam').textContent  = fmt(outerD);
@@ -555,74 +558,65 @@ function drawElev(radii,stageR,stageH,perfH,armL,armAng,stoolH,seated,sightClear
     const headR=bW*0.6, headCY=wy(base+perfH*0.935);
     c.beginPath(); c.arc(wx(0),headCY,headR,0,Math.PI*2); c.fill();
 
-    // ── Arm (right side = toward audience) ────────────────────────────────
-    // Arm goes from shoulder outward+downward
+    // ── Arms and Sacones (both sides) ─────────────────────────────────────
     const sinA=Math.sin(armAng*Math.PI/180), cosA=Math.cos(armAng*Math.PI/180);
-    // shoulder canvas coords (center of body, approx)
-    const sX=wx(0), sY=wy(shoulderAbs);
-    const wX=wx(handleX), wY=wy(handleAbs); // wrist = T-handle
-
-    // Arm line
-    c.strokeStyle=perfCol; c.lineWidth=2;
-    c.beginPath(); c.moveTo(sX,sY); c.lineTo(wX,wY); c.stroke();
-
-    // ── Sacone ────────────────────────────────────────────────────────────
-    // Device axis direction: same as arm = (cosA, -sinA) in world (outward, downward)
-    // T-handle at wrist (handleX, handleAbs).
-    // Cone extends further outward+down to (baseX, baseAbs).
-    // Draw cone body as trapezoid (it has a base width)
-    const coneLen=CONE_H*scale;
-    const coneTopR=Math.max(2, CONE_H*scale*0.06); // narrow at top (near T-handle)
-    const coneBotR=Math.max(6, CONE_H*scale*0.22); // wide at bottom (base)
-    // Axis unit vector in canvas space: right & down
-    const axX= cosA, axY= sinA; // world unit vector (outward, downward in world = outward, upward in canvas Y)
-    // In canvas: +x = right, +y = down. World y up = canvas y down.
-    // axis in canvas: (cosA, +sinA) [down because cone points lower in canvas]
-    const perpX=-sinA, perpY=cosA; // perpendicular to axis in canvas space (rotated 90° CCW)
-
-    // T-handle canvas position
-    const tX=wx(handleX), tY=wy(handleAbs);
-    // Base canvas position
-    const bXc=wx(baseX), bYc=wy(baseAbs);
-
-    // Cone body (quadrilateral): top narrow, bottom wide
-    c.fillStyle=coneFill; c.strokeStyle=coneStroke; c.lineWidth=1;
-    c.beginPath();
-    c.moveTo(tX + perpX*coneTopR*scale/scale, tY + perpY*coneTopR*scale/scale);
-    c.lineTo(tX - perpX*coneTopR*scale/scale, tY - perpY*coneTopR*scale/scale);
-    c.lineTo(bXc - perpX*coneBotR, bYc - perpY*coneBotR);
-    c.lineTo(bXc + perpX*coneBotR, bYc + perpY*coneBotR);
-    c.closePath(); c.fill(); c.stroke();
-
-    // Cone base ellipse (the illuminated open face)
-    const ell_a = coneBotR;      // semi-major (width)
-    const ell_b = coneBotR*0.25; // semi-minor (foreshortening of circle when tilted)
-    c.save();
-    c.translate(bXc, bYc);
-    c.rotate(Math.atan2(perpY,perpX)); // rotate so major axis is perpendicular to cone
-    c.beginPath(); c.ellipse(0,0,ell_a,ell_b,0,0,Math.PI*2);
-    c.fillStyle=isDark?'rgba(220,180,60,0.6)':'rgba(160,110,20,0.5)';
-    c.fill(); c.strokeStyle=coneStroke; c.lineWidth=1; c.stroke();
-    c.restore();
-
-    // T-handle bar
+    const perpX=-sinA, perpY=cosA;
+    const coneTopR=Math.max(2, CONE_H*scale*0.06);
+    const coneBotR=Math.max(6, CONE_H*scale*0.22);
     const tBarLen=coneTopR*3;
-    c.strokeStyle=isDark?'#e0e0e0':'#333'; c.lineWidth=2.5;
-    c.beginPath();
-    c.moveTo(tX+perpX*tBarLen, tY+perpY*tBarLen);
-    c.lineTo(tX-perpX*tBarLen, tY-perpY*tBarLen);
-    c.stroke();
-    // Handle stem (short segment from cone tip upward along axis, but small)
-    c.lineWidth=2;
     const hStemLen=HANDLE_H*scale;
-    c.beginPath();
-    c.moveTo(tX, tY);
-    // stem goes opposite direction from cone (back toward shoulder)
-    c.lineTo(tX-cosA*hStemLen, tY+sinA*hStemLen);
-    c.stroke();
 
-    // Target dot at T-handle height (center, not at handleX which is offset)
-    c.beginPath(); c.arc(wx(0),wy(handleAbs),3.5,0,Math.PI*2);
+    function drawArmAndSacone(side){
+      // side: +1 = right, -1 = left
+      const hX = handleX * side;   // world X of T-handle
+      const bXw = baseX   * side;  // world X of cone base
+
+      // Arm
+      c.strokeStyle=perfCol; c.lineWidth=2;
+      c.beginPath(); c.moveTo(wx(0),wy(shoulderAbs)); c.lineTo(wx(hX),wy(handleAbs)); c.stroke();
+
+      // Cone body (trapezoid)
+      const tX=wx(hX), tY=wy(handleAbs);
+      const bXc=wx(bXw), bYc=wy(baseAbs);
+      // perpendicular direction flips with side so cone always widens away from body
+      const pxS=perpX*side, pyS=perpY;
+
+      c.fillStyle=coneFill; c.strokeStyle=coneStroke; c.lineWidth=1;
+      c.beginPath();
+      c.moveTo(tX + pxS*coneTopR, tY + pyS*coneTopR);
+      c.lineTo(tX - pxS*coneTopR, tY - pyS*coneTopR);
+      c.lineTo(bXc - pxS*coneBotR, bYc - pyS*coneBotR);
+      c.lineTo(bXc + pxS*coneBotR, bYc + pyS*coneBotR);
+      c.closePath(); c.fill(); c.stroke();
+
+      // Cone base ellipse
+      c.save();
+      c.translate(bXc, bYc);
+      c.rotate(Math.atan2(pyS, pxS));
+      c.beginPath(); c.ellipse(0,0,coneBotR,coneBotR*0.25,0,0,Math.PI*2);
+      c.fillStyle=isDark?'rgba(220,180,60,0.6)':'rgba(160,110,20,0.5)';
+      c.fill(); c.strokeStyle=coneStroke; c.lineWidth=1; c.stroke();
+      c.restore();
+
+      // T-handle bar
+      c.strokeStyle=isDark?'#e0e0e0':'#333'; c.lineWidth=2.5;
+      c.beginPath();
+      c.moveTo(tX + pxS*tBarLen, tY + pyS*tBarLen);
+      c.lineTo(tX - pxS*tBarLen, tY - pyS*tBarLen);
+      c.stroke();
+      // Handle stem (back toward shoulder)
+      c.lineWidth=2;
+      c.beginPath();
+      c.moveTo(tX, tY);
+      c.lineTo(tX - cosA*side*hStemLen, tY + sinA*hStemLen);
+      c.stroke();
+    }
+
+    drawArmAndSacone(+1); // right (toward audience)
+    drawArmAndSacone(-1); // left
+
+    // Target dot at right-hand T-handle position (sightline target)
+    c.beginPath(); c.arc(wx(handleX),wy(handleAbs),3.5,0,Math.PI*2);
     c.fillStyle=clrCol; c.fill();
 
     // Label
@@ -700,13 +694,42 @@ function drawElev(radii,stageR,stageH,perfH,armL,armAng,stoolH,seated,sightClear
     const headCenterH   = shoulderH_abs + headR2*1.3/scale;
     c.beginPath(); c.arc(wx(worldX), wy(headCenterH), headR2, 0, Math.PI*2); c.fill();
 
-    // Cymbal (at shoulder level, slightly inward)
-    const cymAbsH = shoulderH_abs;
-    const cymWX=worldX+(worldX>0?-1:1)*cymD*0.25;
-    c.fillStyle=isDark?'rgba(200,160,48,0.45)':'rgba(138,94,10,0.38)';
-    c.strokeStyle=isDark?'#c8a030':'#8a5e0a'; c.lineWidth=0.6;
-    c.beginPath(); c.ellipse(wx(cymWX),wy(cymAbsH),cymD*scale*0.48,cymD*scale*0.065,0,0,Math.PI*2);
+    // ── Cymbal + stand ────────────────────────────────────────────────────
+    // Cymbal center height:
+    // Standing: h*0.60 (chest ≈ 60% of full height)
+    // Seated:   shoulder is at stoolH + h*0.36; chest is shoulder - h*0.22
+    //           so seated chest = stoolH + h*0.36 - h*0.22 = stoolH + h*0.14
+    const cymBodyH = isSeat ? (stoolH + h*0.14) : (h*0.60);
+    const CYM_REACH = 0.60; // m from body center to cymbal center
+    // inward direction: negative worldX side (toward center)
+    const cymCX = worldX + (worldX > 0 ? -CYM_REACH : +CYM_REACH);
+
+    // Stand pole: from floor up to cymbal height, at cymbal X
+    const standCol  = isDark ? '#666' : '#aaa';
+    const legHubH   = 0.30; // m — height where legs connect to pole
+    const footSpread = 0.22; // m — half-width of foot positions on floor
+    c.strokeStyle = standCol; c.lineWidth = 1.2;
+    c.beginPath(); c.moveTo(wx(cymCX), wy(0)); c.lineTo(wx(cymCX), wy(cymBodyH)); c.stroke();
+
+    // Tripod legs: from hub (300mm up) diagonally down to floor, 2 visible in cross-section
+    c.beginPath(); c.moveTo(wx(cymCX), wy(legHubH));
+    c.lineTo(wx(cymCX - footSpread), wy(0)); c.stroke();
+    c.beginPath(); c.moveTo(wx(cymCX), wy(legHubH));
+    c.lineTo(wx(cymCX + footSpread), wy(0)); c.stroke();
+    // Foot tip dots
+    c.fillStyle = standCol;
+    c.beginPath(); c.arc(wx(cymCX - footSpread), wy(0), 1.5, 0, Math.PI*2); c.fill();
+    c.beginPath(); c.arc(wx(cymCX + footSpread), wy(0), 1.5, 0, Math.PI*2); c.fill();
+
+    // Cymbal dish (tilted ellipse at top of stand)
+    c.fillStyle  = isDark ? 'rgba(200,160,48,0.55)' : 'rgba(138,94,10,0.45)';
+    c.strokeStyle= isDark ? '#c8a030' : '#8a5e0a'; c.lineWidth = 0.8;
+    c.beginPath();
+    c.ellipse(wx(cymCX), wy(cymBodyH), cymD*scale*0.5, cymD*scale*0.07, 0, 0, Math.PI*2);
     c.fill(); c.stroke();
+    // Bell dot
+    c.fillStyle = isDark ? '#c8a030' : '#8a5e0a';
+    c.beginPath(); c.arc(wx(cymCX), wy(cymBodyH), cymD*scale*0.08, 0, Math.PI*2); c.fill();
   }
 
   radii.forEach((r,ri)=>{
@@ -721,7 +744,7 @@ function drawElev(radii,stageR,stageH,perfH,armL,armAng,stoolH,seated,sightClear
     const clear=sightClear[ri];
     const col=clear?clrCol:blkCol;
 
-    c.beginPath(); c.moveTo(wx(r),wy(eyeH)); c.lineTo(wx(0),wy(handleAbs));
+    c.beginPath(); c.moveTo(wx(r),wy(eyeH)); c.lineTo(wx(handleX),wy(handleAbs));
     c.strokeStyle=col; c.lineWidth=1.5;
     c.setLineDash(clear?[]:[4,3]); c.stroke(); c.setLineDash([]);
 
