@@ -107,7 +107,7 @@
 
   <div class="sec" data-key="secHeights" style="margin-top:12px">Heights</div>
   <div class="ctrl-row"><label data-key="cStageH">Stage height</label><input type="range" id="c-stageh" min="0" max="1.2" step="0.05" value="0.6" oninput="upd()"><span class="vout" id="v-stageh"></span></div>
-  <div class="ctrl-row"><label data-key="cStoolH">Stool height</label><input type="range" id="c-stoolh" min="0.3" max="0.6" step="0.01" value="0.45" oninput="upd()"><span class="vout" id="v-stoolh"></span></div>
+  <div id="stoolh-rows"></div>
 </div>
 
 <div class="canvas-area">
@@ -209,6 +209,7 @@ const T={
     warnCount:'Total is significantly away from 200.',
     rowInfo:(i,n,r,sp,isSeat,clear)=>
       `R${i+1}: ${n} · r=${r} · ${isSeat?'⊙ seated':'↑ standing'} · sp=${sp} · ${clear?'✓ clear':'✗ blocked'}`,
+    stoolRowLabel:(i)=>`Row ${i+1} stool`,
     lblPlan:'Plan view',
     lblElev:'Elevation — section through center (1:1 scale)',
     legClear:'Sightline to T-handle: clear',
@@ -234,6 +235,7 @@ const T={
     warnCount:'合計人数が200人から大きく外れています。',
     rowInfo:(i,n,r,sp,isSeat,clear)=>
       `${i+1}列: ${n}人 · r=${r} · ${isSeat?'⊙ 着席':'↑ 立位'} · 間隔=${sp} · ${clear?'✓ 見える':'✗ 遮られる'}`,
+    stoolRowLabel:(i)=>`${i+1}列 スツール`,
     lblPlan:'平面図',
     lblElev:'立面図 — 中心断面（1:1 スケール）',
     legClear:'Tハンドルへの視線: 通る',
@@ -245,6 +247,12 @@ const T={
 function t(k){ return T[lang][k]||k; }
 
 let unit='m', lang='en';
+const MAX_ROWS=7;
+const STOOLH_DEFAULT=0.45;
+// Persistent per-row-index stool height memory (m). Index = row index (0 = innermost).
+// Persists across seated-count and row-count changes, per the "remember last-used value
+// per row index" rule, even if that row is currently standing.
+const stoolHeights = Array.from({length:MAX_ROWS},()=>STOOLH_DEFAULT);
 const cvPlan=document.getElementById('cv-plan');
 const cvElev=document.getElementById('cv-elev');
 const ctxP=cvPlan.getContext('2d');
@@ -295,6 +303,40 @@ function checkSightline(radii, ri, eyeH, targetX, targetH, rowHeadFn){
   return true;
 }
 
+// ── per-row stool height controls ───────────────────────────────────────────
+// Rebuilds the slider list for currently-seated rows. Values themselves live in
+// stoolHeights[] (persistent), so rebuilding the DOM never loses data.
+let stoolhDomSeated=-1; // seated count the DOM was last built for
+function rebuildStoolRows(seated){
+  if(seated===stoolhDomSeated){
+    // Same count: just refresh labels/values (language or unit may have changed)
+    for(let ri=0;ri<seated;ri++){
+      const lab=document.getElementById(`l-stoolh-${ri}`);
+      const out=document.getElementById(`v-stoolh-${ri}`);
+      if(lab) lab.textContent=t('stoolRowLabel')(ri);
+      if(out) out.textContent=fmtCm(stoolHeights[ri]);
+    }
+    return;
+  }
+  stoolhDomSeated=seated;
+  const container=document.getElementById('stoolh-rows');
+  container.innerHTML='';
+  for(let ri=0;ri<seated;ri++){
+    const row=document.createElement('div');
+    row.className='ctrl-row';
+    row.innerHTML=
+      `<label id="l-stoolh-${ri}">${t('stoolRowLabel')(ri)}</label>`+
+      `<input type="range" id="c-stoolh-${ri}" min="0.3" max="0.6" step="0.01" value="${stoolHeights[ri]}">`+
+      `<span class="vout" id="v-stoolh-${ri}">${fmtCm(stoolHeights[ri])}</span>`;
+    container.appendChild(row);
+    document.getElementById(`c-stoolh-${ri}`).addEventListener('input',(e)=>{
+      stoolHeights[ri]=parseFloat(e.target.value);
+      document.getElementById(`v-stoolh-${ri}`).textContent=fmtCm(stoolHeights[ri]);
+      upd();
+    });
+  }
+}
+
 // ── update ────────────────────────────────────────────────────────────────────
 function upd(){
   document.querySelectorAll('[data-key]').forEach(el=>{
@@ -314,7 +356,6 @@ function upd(){
   const cymD   = val('c-cym');
   const seated = Math.min(Math.round(val('c-seated')),rows);
   const stageH = val('c-stageh');
-  const stoolH = val('c-stoolh');
   // Fixed constants
   const perfH  = 1.60;
   const armL   = 0.65;
@@ -328,7 +369,7 @@ function upd(){
   document.getElementById('v-cym').textContent    = fmtCm(cymD);
   document.getElementById('v-seated').textContent = seated;
   document.getElementById('v-stageh').textContent = fmtCm(stageH);
-  document.getElementById('v-stoolh').textContent = fmtCm(stoolH);
+  rebuildStoolRows(seated);
 
   const radii    = Array.from({length:rows},(_,r)=>stageR+gap1+r*rowSp);
   const counts   = radii.map(r=>Math.max(3,Math.floor((2*Math.PI*r)/pw)));
@@ -348,10 +389,10 @@ function upd(){
 
   // Representative cymbalist heights for sightline logic
   function rowEyeH(ri){
-    return ri<seated ? eyeSeated(CYMB_H_REP,stoolH) : eyeStanding(CYMB_H_REP);
+    return ri<seated ? eyeSeated(CYMB_H_REP,stoolHeights[ri]) : eyeStanding(CYMB_H_REP);
   }
   function rowHeadH(ri){
-    return ri<seated ? headTopSeated(CYMB_H_REP,stoolH) : headTopStanding(CYMB_H_REP);
+    return ri<seated ? headTopSeated(CYMB_H_REP,stoolHeights[ri]) : headTopStanding(CYMB_H_REP);
   }
 
   const sightClear = radii.map((_,ri)=>checkSightline(radii,ri,rowEyeH(ri),handleX,handleAbs,rowHeadH));
@@ -372,7 +413,7 @@ function upd(){
   wd.textContent=t('warnCount'); wd.style.display=(total<160||total>240)?'block':'none';
 
   drawPlan(radii,counts,stageR,cymD,pw,seated,sightClear);
-  drawElev(radii,stageR,stageH,perfH,armL,armAng,stoolH,seated,sightClear,cymD,pos);
+  drawElev(radii,stageR,stageH,perfH,armL,armAng,stoolHeights,seated,sightClear,cymD,pos);
 }
 
 // ── plan view ─────────────────────────────────────────────────────────────────
@@ -387,7 +428,7 @@ function drawPlan(radii,counts,stageR,cymD,pw,seated,sightClear){
 
   const outerR=radii[radii.length-1];
   const pad=Math.max(cymD,pw*0.6)+0.6;
-  const scale=(Math.min(W,H)/2-20)/(outerR+pad);
+  const scale=Math.max(10,Math.min(W,H)/2-20)/(outerR+pad);
   const cx=W/2, cy=H/2;
 
   const bg       =isDark?'#161614':'#e8e4db';
@@ -472,7 +513,7 @@ function drawPlan(radii,counts,stageR,cymD,pw,seated,sightClear){
 }
 
 // ── elevation view ────────────────────────────────────────────────────────────
-function drawElev(radii,stageR,stageH,perfH,armL,armAng,stoolH,seated,sightClear,cymD,pos){
+function drawElev(radii,stageR,stageH,perfH,armL,armAng,stoolHeights,seated,sightClear,cymD,pos){
   const isDark=window.matchMedia('(prefers-color-scheme: dark)').matches;
   const rows=radii.length;
   const outerR=radii[rows-1];
@@ -484,7 +525,7 @@ function drawElev(radii,stageR,stageH,perfH,armL,armAng,stoolH,seated,sightClear
   const container=cvElev.parentElement;
   const W=container.clientWidth-2;
   const marginL=52,marginR=16,marginT=20,marginB=34;
-  const availW=W-marginL-marginR;
+  const availW=Math.max(40, W-marginL-marginR); // floor avoids scale going ≤0 on very narrow containers
   const scale=availW/(outerR*2); // strict 1:1
   const drawH=maxWorldH*scale;
   const H=Math.ceil(drawH+marginT+marginB);
@@ -642,6 +683,7 @@ function drawElev(radii,stageR,stageH,perfH,armL,armAng,stoolH,seated,sightClear
   function drawCymbalist(worldX,ri,h){
     const isSeat=ri<seated;
     const col=isSeat?colSeat:colStand;
+    const stoolH=stoolHeights[ri]; // per-row stool height (only meaningful if isSeat)
     // base Y: floor (0) for standing, stool top for seated
     const baseY=isSeat?stoolH:0;
 
@@ -740,7 +782,7 @@ function drawElev(radii,stageR,stageH,perfH,armL,armAng,stoolH,seated,sightClear
 
   // ── Sightlines (right side only) ──────────────────────────────────────────
   radii.forEach((r,ri)=>{
-    const eyeH=ri<seated ? eyeSeated(CYMB_H_REP,stoolH) : eyeStanding(CYMB_H_REP);
+    const eyeH=ri<seated ? eyeSeated(CYMB_H_REP,stoolHeights[ri]) : eyeStanding(CYMB_H_REP);
     const clear=sightClear[ri];
     const col=clear?clrCol:blkCol;
 
