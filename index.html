@@ -97,16 +97,16 @@
   <div class="row-detail" id="row-detail"></div>
 
   <div class="sec" data-key="secLayout">Layout</div>
-  <div class="ctrl-row"><label data-key="cRows">Rows</label><input type="range" id="c-rows" min="2" max="7" step="1" value="4" oninput="upd()"><span class="vout" id="v-rows">4</span></div>
+  <div class="ctrl-row"><label data-key="cRows">Rows</label><input type="range" id="c-rows" min="3" max="8" step="1" value="5" oninput="upd()"><span class="vout" id="v-rows">5</span></div>
   <div class="ctrl-row"><label data-key="cStage">Stage diameter</label><input type="range" id="c-stage" min="2" max="8" step="0.5" value="4" oninput="upd()"><span class="vout" id="v-stage"></span></div>
   <div class="ctrl-row"><label data-key="cGap1">Stage → row 1</label><input type="range" id="c-gap1" min="0.5" max="6" step="0.25" value="2.5" oninput="upd()"><span class="vout" id="v-gap1"></span></div>
   <div class="ctrl-row"><label data-key="cRowsp">Row spacing</label><input type="range" id="c-rowsp" min="1" max="4" step="0.25" value="1.5" oninput="upd()"><span class="vout" id="v-rowsp"></span></div>
   <div class="ctrl-row"><label data-key="cPw">Person width</label><input type="range" id="c-pw" min="0.7" max="2" step="0.05" value="1.2" oninput="upd()"><span class="vout" id="v-pw"></span></div>
   <div class="ctrl-row"><label data-key="cCym">Cymbal diam.</label><input type="range" id="c-cym" min="0.35" max="0.65" step="0.025" value="0.45" oninput="upd()"><span class="vout" id="v-cym"></span></div>
-  <div class="ctrl-row"><label data-key="cSeated">Seated rows</label><input type="range" id="c-seated" min="0" max="6" step="1" value="2" oninput="upd()"><span class="vout" id="v-seated">2</span></div>
+  <div class="ctrl-row"><label data-key="cSeated">Seated rows</label><input type="range" id="c-seated" min="0" max="6" step="1" value="3" oninput="upd()"><span class="vout" id="v-seated">3</span></div>
 
   <div class="sec" data-key="secHeights" style="margin-top:12px">Heights</div>
-  <div class="ctrl-row"><label data-key="cStageH">Stage height</label><input type="range" id="c-stageh" min="0" max="1.2" step="0.05" value="0.6" oninput="upd()"><span class="vout" id="v-stageh"></span></div>
+  <div class="ctrl-row"><label data-key="cStageH">Stage height</label><input type="range" id="c-stageh" min="0" max="1.8" step="0.05" value="1" oninput="upd()"><span class="vout" id="v-stageh"></span></div>
   <div id="stoolh-rows"></div>
 </div>
 
@@ -247,7 +247,7 @@ const T={
 function t(k){ return T[lang][k]||k; }
 
 let unit='m', lang='en';
-const MAX_ROWS=7;
+const MAX_ROWS=8;
 const STOOLH_DEFAULT=0.45;
 // Persistent per-row-index stool height memory (m). Index = row index (0 = innermost).
 // Persists across seated-count and row-count changes, per the "remember last-used value
@@ -326,7 +326,7 @@ function rebuildStoolRows(seated){
     row.className='ctrl-row';
     row.innerHTML=
       `<label id="l-stoolh-${ri}">${t('stoolRowLabel')(ri)}</label>`+
-      `<input type="range" id="c-stoolh-${ri}" min="0.3" max="0.6" step="0.01" value="${stoolHeights[ri]}">`+
+      `<input type="range" id="c-stoolh-${ri}" min="0.15" max="0.7" step="0.01" value="${stoolHeights[ri]}">`+
       `<span class="vout" id="v-stoolh-${ri}">${fmtCm(stoolHeights[ri])}</span>`;
     container.appendChild(row);
     document.getElementById(`c-stoolh-${ri}`).addEventListener('input',(e)=>{
