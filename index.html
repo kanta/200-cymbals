@@ -45,13 +45,20 @@
   .warn-yellow{background:var(--warn-bg);color:var(--warn-text);border-color:var(--warn-text);}
   .warn-red{background:var(--danger-bg);color:var(--danger-text);border-color:var(--danger-text);}
   .row-detail{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;}
-  .row-badge{font-size:11px;color:var(--text2);background:var(--surface);border:0.5px solid var(--border);border-radius:4px;padding:2px 5px;}
+  .row-badge{font-size:11px;color:var(--text2);background:var(--surface);border:0.5px solid var(--border);border-radius:4px;padding:2px 5px;display:flex;align-items:center;gap:4px;}
   .row-badge.clear{border-color:#2a9d60;color:#1a7a48;}
   .row-badge.blocked{border-color:#e05030;color:#b03010;}
   @media(prefers-color-scheme:dark){
     .row-badge.clear{color:#50d090;}
     .row-badge.blocked{color:#f07050;}
   }
+  .adj-btn{font-size:13px;line-height:1;padding:0 3px;border:0.5px solid var(--border2);border-radius:3px;background:var(--bg);color:var(--text2);cursor:pointer;font-family:inherit;flex-shrink:0;}
+  .adj-btn:hover{background:var(--surface2);color:var(--text);}
+  .offset-val{font-size:11px;font-weight:500;font-variant-numeric:tabular-nums;min-width:22px;text-align:center;flex-shrink:0;}
+  .offset-val.nonzero{color:var(--accent);}
+  .nudge-btn{font-size:11px;padding:3px 8px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--surface);color:var(--text2);cursor:pointer;font-family:inherit;white-space:nowrap;}
+  .nudge-btn:hover{background:var(--surface2);color:var(--text);}
+  .total-row{display:flex;align-items:center;gap:6px;}
   .sec{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:7px;padding-bottom:5px;border-bottom:0.5px solid var(--border);}
   .ctrl-row{display:flex;align-items:center;gap:6px;margin-bottom:8px;}
   .ctrl-row label{font-size:12px;color:var(--text2);width:108px;flex-shrink:0;line-height:1.3;}
@@ -87,7 +94,14 @@
     </div>
   </div>
   <div class="stats">
-    <div class="stat"><div class="stat-label" data-key="total">Total</div><div class="stat-val" id="s-total">—</div></div>
+    <div class="stat">
+      <div class="stat-label" data-key="total">Total</div>
+      <div class="total-row">
+        <div class="stat-val" id="s-total">—</div>
+        <button class="nudge-btn" id="btn-nudge" onclick="nudgeTo200()" data-key="nudgeTo200">→ 200</button>
+        <button class="nudge-btn" id="btn-reset" onclick="resetAllOffsets()" data-key="resetOffsets" style="display:none">↺</button>
+      </div>
+    </div>
     <div class="stat"><div class="stat-label" data-key="outerDiam">Outer diam.</div><div class="stat-val" id="s-diam">—</div></div>
     <div class="stat"><div class="stat-label" data-key="rows">Rows</div><div class="stat-val" id="s-rows">—</div></div>
     <div class="stat"><div class="stat-label" data-key="minSp">Min spacing</div><div class="stat-val" id="s-minsp">—</div></div>
@@ -207,6 +221,7 @@ const T={
     handleLabel:'T-handle (target)',
     warnCrowd:'Warning: some rows may be too crowded (spacing < 0.8 m).',
     warnCount:'Total is significantly away from 200.',
+    nudgeTo200:'→ 200', resetOffsets:'↺ reset',
     rowInfo:(i,n,r,sp,isSeat,clear)=>
       `R${i+1}: ${n} · r=${r} · ${isSeat?'⊙ seated':'↑ standing'} · sp=${sp} · ${clear?'✓ clear':'✗ blocked'}`,
     stoolRowLabel:(i)=>`Row ${i+1} stool`,
@@ -233,6 +248,7 @@ const T={
     handleLabel:'Tハンドル（視線目標）',
     warnCrowd:'注意: 一部の列が密すぎます（間隔 < 0.8 m）。',
     warnCount:'合計人数が200人から大きく外れています。',
+    nudgeTo200:'→ 200', resetOffsets:'↺ リセット',
     rowInfo:(i,n,r,sp,isSeat,clear)=>
       `${i+1}列: ${n}人 · r=${r} · ${isSeat?'⊙ 着席':'↑ 立位'} · 間隔=${sp} · ${clear?'✓ 見える':'✗ 遮られる'}`,
     stoolRowLabel:(i)=>`${i+1}列 スツール`,
@@ -253,6 +269,48 @@ const STOOLH_DEFAULT=0.45;
 // Persists across seated-count and row-count changes, per the "remember last-used value
 // per row index" rule, even if that row is currently standing.
 const stoolHeights = Array.from({length:MAX_ROWS},()=>STOOLH_DEFAULT);
+// Per-row count offsets (integers). Persists across slider changes — same pattern as stoolHeights.
+// finalCount[ri] = max(3, autoCounts[ri] + countOffsets[ri])
+const countOffsets = Array.from({length:MAX_ROWS},()=>0);
+
+function adjustOffset(ri, delta){
+  countOffsets[ri] = (countOffsets[ri]||0) + delta;
+  upd();
+}
+function nudgeTo200(){
+  // Current auto-counts are recomputed inside upd(); we need them here.
+  // Re-derive them from current slider values directly.
+  const rows  = Math.round(val('c-rows'));
+  const stageR= val('c-stage')/2;
+  const gap1  = val('c-gap1');
+  const rowSp = val('c-rowsp');
+  const pw    = val('c-pw');
+  const radii = Array.from({length:rows},(_,r)=>stageR+gap1+r*rowSp);
+  const auto  = radii.map(r=>Math.max(3,Math.floor((2*Math.PI*r)/pw)));
+  const current = auto.map((a,ri)=>Math.max(3,a+(countOffsets[ri]||0)));
+  const diff = 200 - current.reduce((a,b)=>a+b,0);
+  if(diff===0){ upd(); return; }
+  // Distribute proportionally by circumference (larger rows absorb more)
+  const totalR = radii.reduce((a,b)=>a+b,0);
+  let remaining = diff;
+  const shares = radii.map(r=>diff*r/totalR);
+  // Round each share, track remainder
+  const rounded = shares.map(s=>Math.round(s));
+  // Fix rounding error by adjusting the outermost row
+  const roundedSum = rounded.reduce((a,b)=>a+b,0);
+  rounded[rows-1] += diff - roundedSum;
+  for(let ri=0;ri<rows;ri++){
+    countOffsets[ri] = (countOffsets[ri]||0) + rounded[ri];
+    // Clamp: don't let final count go below 3
+    const finalCount = Math.max(3, auto[ri]+countOffsets[ri]);
+    countOffsets[ri] = finalCount - auto[ri];
+  }
+  upd();
+}
+function resetAllOffsets(){
+  for(let i=0;i<MAX_ROWS;i++) countOffsets[i]=0;
+  upd();
+}
 const cvPlan=document.getElementById('cv-plan');
 const cvElev=document.getElementById('cv-elev');
 const ctxP=cvPlan.getContext('2d');
@@ -372,7 +430,8 @@ function upd(){
   rebuildStoolRows(seated);
 
   const radii    = Array.from({length:rows},(_,r)=>stageR+gap1+r*rowSp);
-  const counts   = radii.map(r=>Math.max(3,Math.floor((2*Math.PI*r)/pw)));
+  const autoCounts = radii.map(r=>Math.max(3,Math.floor((2*Math.PI*r)/pw)));
+  const counts   = autoCounts.map((a,ri)=>Math.max(3,a+(countOffsets[ri]||0)));
   const total    = counts.reduce((a,b)=>a+b,0);
   const outerD   = radii[rows-1]*2;
   const spacings = radii.map((r,i)=>(2*Math.PI*r)/counts[i]);
@@ -402,9 +461,21 @@ function upd(){
   document.getElementById('s-rows').textContent  = rows;
   document.getElementById('s-minsp').textContent = fmtS(minSp);
 
+  // Show reset button only when any offset is non-zero
+  const anyOffset = countOffsets.slice(0,rows).some(o=>o!==0);
+  document.getElementById('btn-reset').style.display = anyOffset ? '' : 'none';
+
   document.getElementById('row-detail').innerHTML = counts.map((n,i)=>{
     const cls = sightClear[i] ? 'clear' : 'blocked';
-    return `<span class="row-badge ${cls}">${t('rowInfo')(i,n,fmtS(radii[i]),fmtS(spacings[i]),i<seated,sightClear[i])}</span>`;
+    const off = countOffsets[i]||0;
+    const offTxt = off===0 ? '' : (off>0?`+${off}`:`${off}`);
+    const offCls = off===0 ? 'offset-val' : 'offset-val nonzero';
+    return `<span class="row-badge ${cls}">`+
+      `<button class="adj-btn" onclick="adjustOffset(${i},-1)">−</button>`+
+      `<span class="${offCls}" id="off-val-${i}">${offTxt}</span>`+
+      `<button class="adj-btn" onclick="adjustOffset(${i},+1)">+</button>`+
+      `${t('rowInfo')(i,n,fmtS(radii[i]),fmtS(spacings[i]),i<seated,sightClear[i])}`+
+      `</span>`;
   }).join('');
 
   const wc=document.getElementById('warn-crowd');
