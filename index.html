@@ -470,7 +470,7 @@ function drawPlan(radii,counts,stageR,cymD,pw,seated,sightClear){
       const standD=bodyH*0.7+cymR*0.6;
       const cymX=px+dirX*standD, cymY=py+dirY*standD;
       c.save(); c.translate(cymX,cymY); c.rotate(angle+Math.PI/2);
-      c.beginPath(); c.ellipse(0,0,cymR,cymR*0.28,0,0,Math.PI*2);
+      c.beginPath(); c.arc(0,0,cymR,0,Math.PI*2);
       c.fillStyle=cymCol; c.fill(); c.strokeStyle=cymStr; c.lineWidth=0.8; c.stroke();
       c.beginPath(); c.arc(0,0,cymR*0.18,0,Math.PI*2); c.fillStyle=cymStr; c.fill();
       c.restore();
@@ -494,7 +494,7 @@ function drawPlan(radii,counts,stageR,cymD,pw,seated,sightClear){
   [[cymCol,cymStr,'cymbal'],[colSeat,null,'seated'],[colStand,null,'standing']].forEach(([col,str,key],i)=>{
     const y=legY+i*18;
     if(str){
-      c.fillStyle=col; c.beginPath(); c.ellipse(legX+5,y+5,5,1.8,0,0,Math.PI*2); c.fill();
+      c.fillStyle=col; c.beginPath(); c.arc(legX+5,y+5,4,0,Math.PI*2); c.fill();
       c.strokeStyle=str; c.lineWidth=0.5; c.stroke();
     }else{
       c.fillStyle=col; c.beginPath(); c.roundRect(legX,y,10,10,2); c.fill();
