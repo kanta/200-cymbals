@@ -72,6 +72,8 @@
   .sl-legend{display:flex;flex-wrap:wrap;gap:10px;font-size:11px;color:var(--text2);margin-top:5px;}
   .sl-legend span{display:flex;align-items:center;gap:5px;}
   footer{font-size:10px;color:var(--text3);padding:8px 16px;border-top:0.5px solid var(--border);text-align:center;}
+  .export-btn{width:100%;padding:7px 0;margin-top:10px;font-size:12px;font-weight:500;font-family:inherit;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--surface);color:var(--text);cursor:pointer;letter-spacing:.01em;}
+  .export-btn:hover{background:var(--surface2);}
 </style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -133,6 +135,7 @@
   <div class="ctrl-row"><label data-key="cPathAlpha">Path tilt α</label><input type="range" id="c-path-alpha" min="-75" max="45" step="1" value="0" oninput="upd()"><span class="vout" id="v-path-alpha">0°</span></div>
   <div class="ctrl-row"><label data-key="cPathWidth">Path width</label><input type="range" id="c-path-width" min="0.508" max="1.9812" step="0.0254" value="0.8128" oninput="upd()"><span class="vout" id="v-path-width"></span></div>
   <div class="warn warn-yellow" id="warn-path-alpha"></div>
+  <button class="export-btn" onclick="exportSVG()" data-key="exportBtn">⬇ Export SVG drawing</button>
 </div>
 
 <div class="canvas-area">
@@ -247,6 +250,20 @@ const T={
     cPathAlpha:'Path tilt α', cPathWidth:'Path width', cPathEnable:'Show path',
     warnPathAlpha:'Warning: positive α tilts path toward stage — gap angles narrowing.',
     warnPathAlphaRed:'Danger: α too high — path gaps may face stage center (silence).',
+    exportBtn:'⬇ Export SVG drawing',
+    svgTitle:'Air Record Cir [ARC] — Cymbaler Layout',
+    svgSubtitle:'The Watermill Center · Water Mill, NY · July 25, 2026',
+    svgStool:'Stool center',
+    svgCymbal:'Cymbal stand center',
+    svgStage:'Stage',
+    svgPath:'Access path',
+    svgRow:'Row',
+    svgTotal:'Total cymbalers',
+    svgGenerated:'Generated',
+    svgProvisional:'All dimensions provisional — verify on site before marking.',
+    svgRadius:'Radius',
+    svgSpacing:'Spacing',
+    svgStoolH:'Stool ht.',
   },
   ja:{
     title:'シンバラー配置ツール', sub:'約200名 · 屋外パフォーマンス',
@@ -279,6 +296,20 @@ const T={
     cPathAlpha:'傾き α', cPathWidth:'通路幅', cPathEnable:'動線を表示',
     warnPathAlpha:'注意: αが正のため、動線がステージ方向に傾いています。',
     warnPathAlphaRed:'危険: αが大きすぎます — ギャップがステージ中心を向く可能性があります。',
+    exportBtn:'⬇ SVG図面を出力',
+    svgTitle:'Air Record Cir [ARC] — シンバラー配置図',
+    svgSubtitle:'The Watermill Center · Water Mill, NY · 2026年7月25日',
+    svgStool:'スツール中心',
+    svgCymbal:'シンバルスタンド中心',
+    svgStage:'ステージ',
+    svgPath:'通路',
+    svgRow:'列',
+    svgTotal:'シンバラー合計',
+    svgGenerated:'作成日時',
+    svgProvisional:'寸法はすべて暫定値です — マーキング前に現場で確認してください。',
+    svgRadius:'半径',
+    svgSpacing:'間隔',
+    svgStoolH:'スツール高',
   }
 };
 function t(k){ return T[lang][k]||k; }
@@ -1010,6 +1041,241 @@ function drawElev(radii,stageR,stageH,perfH,armL,armAng,stoolHeights,seated,sigh
   c.fillStyle=textCol; c.font='10px "DM Sans",sans-serif';
   c.textAlign='center'; c.textBaseline='bottom';
   c.fillText(fmt(bM),bX+bPx/2,bY2-4);
+}
+
+// ── SVG export ────────────────────────────────────────────────────────────────
+function exportSVG(){
+  // ── re-derive all layout values from current slider state ──────────────────
+  const rows   = Math.round(val('c-rows'));
+  const stageR = val('c-stage')/2;
+  const gap1   = val('c-gap1');
+  const rowSp  = val('c-rowsp');
+  const pw     = val('c-pw');
+  const cymD   = val('c-cym');
+  const seated = Math.min(Math.round(val('c-seated')), rows);
+  const radii  = Array.from({length:rows},(_,r)=>stageR+gap1+r*rowSp);
+  const autoCounts = radii.map(r=>Math.max(3,Math.floor((2*Math.PI*r)/pw)));
+  const counts = autoCounts.map((a,ri)=>Math.max(3,a+(countOffsets[ri]||0)));
+  const total  = counts.reduce((a,b)=>a+b,0);
+  const outerR = radii[rows-1];
+
+  const pathEnabled  = document.getElementById('c-path-enable').checked;
+  const pathAngleDeg = val('c-path-angle');
+  const pathAlpha    = val('c-path-alpha')*Math.PI/180;
+  const pathTSlider  = document.getElementById('c-path-T');
+  const pathT        = parseFloat(pathTSlider.value);
+  const pathWidth    = val('c-path-width');
+  const pathAngleRad = pathAngleDeg*Math.PI/180;
+
+  const pathGapAngles = pathEnabled ? radii.map(r=>{
+    const cosA=Math.cos(pathAlpha);
+    const disc=r*r-pathT*pathT*cosA*cosA;
+    if(disc<0) return null;
+    const tLine=pathT*Math.sin(pathAlpha)+Math.sqrt(disc);
+    const xGap=-pathT+tLine*Math.sin(pathAlpha);
+    const yGap=-tLine*Math.cos(pathAlpha);
+    return Math.atan2(yGap,xGap)+pathAngleRad;
+  }) : radii.map(()=>null);
+
+  const standD_world = pw*0.224 + cymD*0.3;
+
+  // ── SVG coordinate system: 1 unit = 1 foot ────────────────────────────────
+  const M2FT = 1/0.3048;
+  const margin = 4;
+  const outerFt = outerR*M2FT;
+  const titleH = 3.2;
+  const vbSize = (outerFt+margin)*2;
+  const cx = vbSize/2, cy = vbSize/2;
+  function wx(xm){ return cx + xm*M2FT; }
+  function wy(ym){ return cy + ym*M2FT; }
+
+  function fmtFt(m){
+    const totalIn = Math.round(m/0.0254);
+    const ft = Math.floor(totalIn/12);
+    const inch = totalIn%12;
+    return inch===0 ? `${ft}′` : `${ft}′ ${inch}″`;
+  }
+  function fmtDual(m){ return `${fmtFt(m)}  [${m.toFixed(2)} m]`; }
+  function fmtDualShort(m){ return `${fmtFt(m)} [${m.toFixed(2)}m]`; }
+
+  // ── numbering: innermost ring first, clockwise from path gap ──────────────
+  let globalNum = 1;
+  const positions = [];
+
+  radii.forEach((r, ri)=>{
+    const n = counts[ri];
+    const gapAngle = pathGapAngles[ri];
+    const halfA = (pathEnabled && gapAngle!==null)
+      ? Math.asin(Math.min(1,(pathWidth/2)/r)) : 0;
+
+    const angles = [];
+    for(let i=0;i<n;i++){
+      const angle = (2*Math.PI*i)/n - Math.PI/2;
+      if(pathEnabled && gapAngle!==null){
+        let diff = angle - gapAngle;
+        diff = diff - Math.round(diff/(2*Math.PI))*2*Math.PI;
+        if(Math.abs(diff) < halfA) continue;
+      }
+      angles.push(angle);
+    }
+
+    let startIdx = 0;
+    if(pathEnabled && gapAngle!==null){
+      const gapExit = gapAngle + halfA;
+      let minDiff = Infinity;
+      for(let i=0;i<angles.length;i++){
+        let diff = angles[i] - gapExit;
+        diff = diff - Math.floor(diff/(2*Math.PI))*2*Math.PI;
+        if(diff < minDiff){ minDiff=diff; startIdx=i; }
+      }
+    }
+
+    for(let k=0;k<angles.length;k++){
+      const idx = (startIdx+k)%angles.length;
+      const angle = angles[idx];
+      const pxm = r*Math.cos(angle);
+      const pym = r*Math.sin(angle);
+      const dirX = Math.cos(angle+Math.PI);
+      const dirY = Math.sin(angle+Math.PI);
+      positions.push({ri, angle, pxm, pym,
+        cymXm: pxm+dirX*standD_world, cymYm: pym+dirY*standD_world,
+        num: globalNum++});
+    }
+  });
+
+  // ── build SVG ─────────────────────────────────────────────────────────────
+  const svgLines = [];
+  const L = s => svgLines.push(s);
+
+  function crosshair(xSvg,ySvg,size,color,strokeW=0.8){
+    const s=size/2;
+    return `<line x1="${(xSvg-s).toFixed(3)}" y1="${ySvg.toFixed(3)}" x2="${(xSvg+s).toFixed(3)}" y2="${ySvg.toFixed(3)}" stroke="${color}" stroke-width="${strokeW}"/>` +
+           `<line x1="${xSvg.toFixed(3)}" y1="${(ySvg-s).toFixed(3)}" x2="${xSvg.toFixed(3)}" y2="${(ySvg+s).toFixed(3)}" stroke="${color}" stroke-width="${strokeW}"/>`;
+  }
+
+  const vbW = vbSize, vbH = vbSize + titleH;
+  L(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${vbW.toFixed(2)} ${vbH.toFixed(2)}" width="${(vbW*72).toFixed(0)}px" height="${(vbH*72).toFixed(0)}px" font-family="'Helvetica Neue',Helvetica,Arial,sans-serif">`);
+  L(`<defs><marker id="tick" viewBox="-1 -3 2 6" refX="0" refY="0" markerWidth="1" markerHeight="6" orient="auto"><line x1="0" y1="-3" x2="0" y2="3" stroke="#333" stroke-width="0.5"/></marker></defs>`);
+  L(`<rect width="${vbW.toFixed(2)}" height="${vbH.toFixed(2)}" fill="white"/>`);
+
+  // ring reference circles
+  L(`<!-- Ring reference circles -->`);
+  radii.forEach(r=>{
+    L(`<circle cx="${cx.toFixed(3)}" cy="${cy.toFixed(3)}" r="${(r*M2FT).toFixed(3)}" fill="none" stroke="#ccc" stroke-width="0.3" stroke-dasharray="1,1"/>`);
+  });
+
+  // stage
+  L(`<!-- Stage -->`);
+  L(`<circle cx="${cx.toFixed(3)}" cy="${cy.toFixed(3)}" r="${(stageR*M2FT).toFixed(3)}" fill="#eee" stroke="#888" stroke-width="0.5"/>`);
+  L(crosshair(cx, cy, 1.2, '#666', 0.5));
+  L(`<text x="${cx.toFixed(3)}" y="${(cy+0.4).toFixed(3)}" text-anchor="middle" font-size="0.7" fill="#555">${t('svgStage')}</text>`);
+
+  // path corridor
+  if(pathEnabled){
+    L(`<!-- Path corridor -->`);
+    const cosA=Math.cos(pathAlpha), sinA=Math.sin(pathAlpha);
+    const cosP=Math.cos(pathAngleRad), sinP=Math.sin(pathAngleRad);
+    function toSVG(lx,ly){
+      return [wx(lx*cosP-ly*sinP), wy(lx*sinP+ly*cosP)];
+    }
+    const rOut=outerR+cymD;
+    const tOut=pathT*sinA+Math.sqrt(Math.max(0,rOut*rOut-pathT*pathT*cosA*cosA));
+    const hw=pathWidth/2;
+    const p0=toSVG(-pathT-hw*cosA,  hw*sinA);
+    const p1=toSVG(-pathT+hw*cosA, -hw*sinA);
+    const p2=toSVG(-pathT+hw*cosA+tOut*sinA, -hw*sinA-tOut*cosA);
+    const p3=toSVG(-pathT-hw*cosA+tOut*sinA,  hw*sinA-tOut*cosA);
+    const pts=`${p0[0].toFixed(3)},${p0[1].toFixed(3)} ${p1[0].toFixed(3)},${p1[1].toFixed(3)} ${p2[0].toFixed(3)},${p2[1].toFixed(3)} ${p3[0].toFixed(3)},${p3[1].toFixed(3)}`;
+    L(`<polygon points="${pts}" fill="rgba(239,159,39,0.08)" stroke="#e09020" stroke-width="0.25" stroke-dasharray="0.5,0.5"/>`);
+    L(`<circle cx="${cx.toFixed(3)}" cy="${cy.toFixed(3)}" r="${(pathT*M2FT).toFixed(3)}" fill="none" stroke="#e09020" stroke-width="0.2" stroke-dasharray="0.4,0.4"/>`);
+    const mx=((p2[0]+p3[0])/2).toFixed(3), my=((p2[1]+p3[1])/2-0.3).toFixed(3);
+    L(`<text x="${mx}" y="${my}" text-anchor="middle" font-size="0.55" fill="#a06010">${t('svgPath')}: ${fmtDualShort(pathWidth)}</text>`);
+  }
+
+  // Cymbaler positions
+  L(`<!-- Cymbaler positions -->`);
+  for(let ri=0;ri<rows;ri++){
+    L(`<!-- Row ${ri+1} -->`);
+    positions.filter(p=>p.ri===ri).forEach(({angle, pxm, pym, cymXm, cymYm, num})=>{
+      const sx=wx(pxm), sy=wy(pym), cx2=wx(cymXm), cy2=wy(cymYm);
+      L(`<line x1="${sx.toFixed(3)}" y1="${sy.toFixed(3)}" x2="${cx2.toFixed(3)}" y2="${cy2.toFixed(3)}" stroke="#aaa" stroke-width="0.18"/>`);
+      L(crosshair(cx2, cy2, 0.28, '#8a6010', 0.3));
+      L(`<circle cx="${cx2.toFixed(3)}" cy="${cy2.toFixed(3)}" r="${(cymD/2*M2FT).toFixed(3)}" fill="none" stroke="#c8a030" stroke-width="0.18" stroke-dasharray="0.25,0.25"/>`);
+      L(crosshair(sx, sy, 0.35, ri<seated?'#4a44a8':'#0f6e56', 0.35));
+      const lx=(sx+Math.cos(angle)*0.55).toFixed(3), ly=(sy+Math.sin(angle)*0.55).toFixed(3);
+      const taDeg=((angle*180/Math.PI)+270)%360;
+      L(`<text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="central" font-size="0.45" fill="#222" transform="rotate(${taDeg.toFixed(1)},${lx},${ly})">#${num}</text>`);
+    });
+  }
+
+  // ring radius dimension labels
+  L(`<!-- Ring radius annotations -->`);
+  radii.forEach((r,ri)=>{
+    const la=-Math.PI/2-0.18;
+    const lx=(wx(r*Math.cos(la))-0.1).toFixed(3), ly=(wy(r*Math.sin(la))-0.25).toFixed(3);
+    const stoolHtxt=ri<seated?`  ${t('svgStoolH')} ${fmtDualShort(stoolHeights[ri])}`:'';
+    L(`<text x="${lx}" y="${ly}" text-anchor="end" font-size="0.42" fill="#555">${t('svgRow')} ${ri+1}  r=${fmtDualShort(r)}  sp=${fmtDualShort((2*Math.PI*r)/counts[ri])}${stoolHtxt}</text>`);
+    L(`<line x1="${(wx(r*Math.cos(la))).toFixed(3)}" y1="${(wy(r*Math.sin(la))).toFixed(3)}" x2="${(wx((r+0.3)*Math.cos(la))).toFixed(3)}" y2="${(wy((r+0.3)*Math.sin(la))).toFixed(3)}" stroke="#aaa" stroke-width="0.2"/>`);
+  });
+
+  // scale bar
+  L(`<!-- Scale bar -->`);
+  const sbX=margin*0.6, sbY=cy+outerFt+1.8, sbTotalFt=20;
+  L(`<g id="scale-bar">`);
+  [0,5,10,15,20].forEach((f,i,a)=>{
+    if(i<a.length-1){
+      L(`  <rect x="${(sbX+f).toFixed(3)}" y="${(sbY-0.25).toFixed(3)}" width="${a[i+1]-f}" height="0.25" fill="${i%2===0?'#333':'#fff'}" stroke="#333" stroke-width="0.1"/>`);
+    }
+    L(`  <line x1="${(sbX+f).toFixed(3)}" y1="${(sbY-0.35).toFixed(3)}" x2="${(sbX+f).toFixed(3)}" y2="${sbY.toFixed(3)}" stroke="#333" stroke-width="0.15"/>`);
+    L(`  <text x="${(sbX+f).toFixed(3)}" y="${(sbY+0.45).toFixed(3)}" text-anchor="middle" font-size="0.42" fill="#333">${f}′</text>`);
+  });
+  L(`  <text x="${(sbX+sbTotalFt/2).toFixed(3)}" y="${(sbY+0.95).toFixed(3)}" text-anchor="middle" font-size="0.38" fill="#666">feet</text>`);
+  const sbYm=sbY+1.5;
+  [0,2,4,6].forEach((m,i,a)=>{
+    if(i<a.length-1){
+      L(`  <rect x="${(sbX+m*M2FT).toFixed(3)}" y="${(sbYm-0.2).toFixed(3)}" width="${(a[i+1]-m)*M2FT}" height="0.2" fill="${i%2===0?'#555':'#fff'}" stroke="#555" stroke-width="0.1"/>`);
+    }
+    L(`  <text x="${(sbX+m*M2FT).toFixed(3)}" y="${(sbYm+0.42).toFixed(3)}" text-anchor="middle" font-size="0.38" fill="#555">${m} m</text>`);
+  });
+  L(`</g>`);
+  const arrX=sbX+sbTotalFt+1.8, arrY=sbY-0.2;
+  L(`<line x1="${arrX.toFixed(3)}" y1="${(arrY+0.9).toFixed(3)}" x2="${arrX.toFixed(3)}" y2="${(arrY-0.1).toFixed(3)}" stroke="#333" stroke-width="0.3" marker-end="url(#tick)"/>`);
+  L(`<text x="${arrX.toFixed(3)}" y="${(arrY-0.4).toFixed(3)}" text-anchor="middle" font-size="0.5" fill="#333">N</text>`);
+  L(`<text x="${arrX.toFixed(3)}" y="${(arrY+1.3).toFixed(3)}" text-anchor="middle" font-size="0.35" fill="#888">(ref only)</text>`);
+
+  // legend
+  L(`<!-- Legend -->`);
+  const legX=sbX, legY=sbY+3.0;
+  L(`<text x="${legX}" y="${legY}" font-size="0.5" font-weight="bold" fill="#333">Legend</text>`);
+  L(crosshair(legX+0.2,legY+0.7,0.35,'#4a44a8',0.4));
+  L(`<text x="${(legX+0.55).toFixed(3)}" y="${(legY+0.77).toFixed(3)}" font-size="0.42" fill="#333">${t('svgStool')} (seated row)</text>`);
+  L(crosshair(legX+0.2,legY+1.3,0.35,'#0f6e56',0.4));
+  L(`<text x="${(legX+0.55).toFixed(3)}" y="${(legY+1.37).toFixed(3)}" font-size="0.42" fill="#333">${t('svgStool')} (standing row)</text>`);
+  L(crosshair(legX+0.2,legY+1.9,0.28,'#8a6010',0.3));
+  L(`<circle cx="${(legX+0.2).toFixed(3)}" cy="${(legY+1.9).toFixed(3)}" r="0.18" fill="none" stroke="#c8a030" stroke-width="0.18" stroke-dasharray="0.15,0.15"/>`);
+  L(`<text x="${(legX+0.55).toFixed(3)}" y="${(legY+1.97).toFixed(3)}" font-size="0.42" fill="#333">${t('svgCymbal')}</text>`);
+  L(`<text x="${(legX+0.2).toFixed(3)}" y="${(legY+2.58).toFixed(3)}" text-anchor="middle" font-size="0.45" fill="#222">#1</text>`);
+  L(`<text x="${(legX+0.55).toFixed(3)}" y="${(legY+2.62).toFixed(3)}" font-size="0.42" fill="#333">Cymbaler number (innermost row first, clockwise from path)</text>`);
+
+  // title block
+  L(`<!-- Title block -->`);
+  const tbY=vbSize+0.35;
+  L(`<line x1="0" y1="${vbSize.toFixed(3)}" x2="${vbW.toFixed(3)}" y2="${vbSize.toFixed(3)}" stroke="#bbb" stroke-width="0.15"/>`);
+  L(`<text x="${(vbW/2).toFixed(3)}" y="${(tbY+0.55).toFixed(3)}" text-anchor="middle" font-size="0.9" font-weight="bold" fill="#111">${t('svgTitle')}</text>`);
+  L(`<text x="${(vbW/2).toFixed(3)}" y="${(tbY+1.25).toFixed(3)}" text-anchor="middle" font-size="0.55" fill="#555">${t('svgSubtitle')}</text>`);
+  const statsItems=[`${t('svgTotal')}: ${total}`,`${t('svgRow')}s: ${rows}`,`Stage: ∅${fmtDual(stageR*2)}`,pathEnabled?`${t('svgPath')}: ${fmtDualShort(pathWidth)} wide`:''].filter(Boolean).join('   ·   ');
+  L(`<text x="${(vbW/2).toFixed(3)}" y="${(tbY+1.9).toFixed(3)}" text-anchor="middle" font-size="0.48" fill="#333">${statsItems}</text>`);
+  const now=new Date();
+  L(`<text x="${(vbW/2).toFixed(3)}" y="${(tbY+2.6).toFixed(3)}" text-anchor="middle" font-size="0.4" fill="#888">${t('svgGenerated')}: ${now.toISOString().slice(0,16).replace('T',' ')} UTC   —   ${t('svgProvisional')}</text>`);
+  L(`</svg>`);
+
+  // download
+  const blob=new Blob([svgLines.join('\n')],{type:'image/svg+xml;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download=`ARC-layout-${now.toISOString().slice(0,10)}-n${total}.svg`;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
 }
 
 upd();
